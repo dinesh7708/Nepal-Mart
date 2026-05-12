@@ -1,0 +1,14 @@
+{
+  "name": "Nepal Mart",
+  "description": "Instant grocery delivery platform for Nepal, providing daily essentials from local stores with lightning-fast speed.",
+  "requestFramePermissions": [
+    "geolocation"
+  ],
+  "majorCapabilities": [
+    "Instant Delivery Tracking",
+    "Smart Grocery Search",
+    "Multi-Store Support",
+    "Tiered Loyalty Program",
+    "Referral Reward System"
+  ]
+}

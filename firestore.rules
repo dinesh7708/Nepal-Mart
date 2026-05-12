@@ -1,0 +1,129 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    function isValidId(id) {
+       return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // Support Settings
+    match /settings/support {
+      allow read: if true; // Publicly readable
+      allow write: if isAdmin() && 
+                    incoming().email is string && incoming().email.size() <= 100 &&
+                    incoming().phone is string && incoming().phone.size() <= 20 &&
+                    incoming().whatsapp is string && incoming().whatsapp.size() <= 20 &&
+                    incoming().address is string && incoming().address.size() <= 200;
+    }
+
+    // Support Tickets
+    match /tickets/{ticketId} {
+      allow create: if isValidId(ticketId) &&
+                     incoming().name is string && incoming().name.size() <= 100 &&
+                     incoming().email is string && incoming().email.size() <= 100 &&
+                     incoming().message is string && incoming().message.size() <= 1000 &&
+                     incoming().status == 'open' &&
+                     incoming().createdAt == request.time.toMillis();
+      allow read, update, delete: if isAdmin();
+      allow list: if isAdmin();
+    }
+
+    // Commission Payments
+    match /commission_payments/{paymentId} {
+      allow create: if isSignedIn() && isValidId(paymentId) &&
+                     incoming().storeId is string &&
+                     get(/databases/$(database)/documents/stores/$(incoming().storeId)).data.ownerId == request.auth.uid &&
+                     incoming().status == 'pending' &&
+                     incoming().createdAt == request.time.toMillis();
+      allow read: if isSignedIn() && (
+                    isAdmin() || 
+                    get(/databases/$(database)/documents/stores/$(resource.data.storeId)).data.ownerId == request.auth.uid
+                  );
+      allow update: if isAdmin() && 
+                     incoming().diff(existing()).affectedKeys().hasOnly(['status', 'verifiedAt', 'notes']);
+    }
+
+    // Withdrawals
+    match /withdrawals/{withdrawalId} {
+      allow read, write: if isAdmin();
+    }
+
+    // Admin Withdrawal Settings
+    match /settings/admin_withdrawals {
+      allow read, write: if isAdmin();
+    }
+
+    // Reports
+    match /reports/{reportId} {
+      allow create: if isSignedIn() && isValidId(reportId) &&
+                     incoming().reporterId == request.auth.uid &&
+                     incoming().status == 'pending' &&
+                     incoming().createdAt == request.time.toMillis();
+      allow read, update, delete: if isAdmin();
+    }
+
+    // Announcements
+    match /announcements/{announcementId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Stores (Allow owner to update payment settings, deny if suspended)
+    match /stores/{storeId} {
+      allow read: if true;
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && (
+                      isAdmin() || 
+                      (resource.data.ownerId == request.auth.uid && 
+                       resource.data.status != 'suspended' &&
+                       incoming().status == existing().status &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['paymentSettings', 'openingTime', 'closingTime', 'contactNumber', 'address']))
+                    );
+    }
+
+    // Orders (Handle payment status and commission)
+    match /orders/{orderId} {
+      allow read: if isSignedIn() && (
+                    isAdmin() || 
+                    resource.data.customerId == request.auth.uid || 
+                    get(/databases/$(database)/documents/stores/$(resource.data.storeId)).data.ownerId == request.auth.uid
+                  );
+      allow create: if isSignedIn() && 
+                    incoming().customerId == request.auth.uid &&
+                    incoming().paymentStatus == 'pending';
+      allow update: if isSignedIn() && (
+                      isAdmin() || 
+                      (get(/databases/$(database)/documents/stores/$(resource.data.storeId)).data.ownerId == request.auth.uid &&
+                       incoming().diff(existing()).affectedKeys().hasAny(['status', 'paymentStatus', 'commissionAmount', 'storeEarnings'])) ||
+                      (resource.data.customerId == request.auth.uid &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['paymentScreenshot', 'paymentStatus']))
+                    );
+    }
+
+    // Admins collection (read only by self, write by no one via client)
+    match /admins/{userId} {
+      allow read: if request.auth.uid == userId;
+    }
+  }
+}

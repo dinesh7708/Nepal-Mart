@@ -1,0 +1,120 @@
+{
+  "entities": {
+    "SupportSettings": {
+      "title": "Support Settings",
+      "description": "Dynamic contact and support information for the marketplace",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "description": "Support email address" },
+        "phone": { "type": "string", "description": "Customer care phone number" },
+        "whatsapp": { "type": "string", "description": "WhatsApp contact number" },
+        "address": { "type": "string", "description": "Physical office address" },
+        "facebook": { "type": "string", "description": "Facebook page link" },
+        "instagram": { "type": "string", "description": "Instagram profile link" },
+        "twitter": { "type": "string", "description": "Twitter profile link" },
+        "updatedAt": { "type": "number", "description": "Last update timestamp" }
+      },
+      "required": ["email", "phone", "whatsapp", "address"]
+    },
+    "SupportTicket": {
+      "title": "Support Ticket",
+      "description": "User reported issues or inquiries",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "subject": { "type": "string" },
+        "message": { "type": "string" },
+        "status": { "type": "string", "enum": ["open", "closed"] },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["name", "email", "subject", "message", "status", "createdAt"]
+    },
+    "CommissionPayment": {
+      "title": "Commission Payment",
+      "description": "Store paying commission to admin",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "storeId": { "type": "string" },
+        "amount": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending", "verified", "rejected"] },
+        "screenshot": { "type": "string" },
+        "notes": { "type": "string" },
+        "createdAt": { "type": "number" },
+        "verifiedAt": { "type": "number" }
+      }
+    },
+    "WithdrawalRequest": {
+      "title": "Withdrawal Request",
+      "description": "Admin withdrawing platform earnings",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "amount": { "type": "number" },
+        "method": { "type": "string" },
+        "details": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "completed", "rejected"] },
+        "createdAt": { "type": "number" }
+      }
+    },
+    "UserReport": {
+      "title": "User Report",
+      "description": "Complaint about a store or product",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "reporterId": { "type": "string" },
+        "targetId": { "type": "string" },
+        "targetType": { "type": "string", "enum": ["store", "product"] },
+        "reason": { "type": "string" },
+        "description": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "reviewed", "resolved"] },
+        "createdAt": { "type": "number" }
+      }
+    },
+    "Announcement": {
+      "title": "Announcement",
+      "description": "Safety updates or platform news",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "type": { "type": "string", "enum": ["safety", "update", "promotion"] },
+        "createdAt": { "type": "number" }
+      }
+    }
+  },
+  "firestore": {
+    "settings/support": {
+      "schema": "SupportSettings",
+      "description": "Single document containing global support configuration"
+    },
+    "tickets": {
+      "schema": "SupportTicket",
+      "description": "Collection of all support tickets submitted by users"
+    },
+    "commission_payments": {
+      "schema": "CommissionPayment",
+      "description": "Payments from stores to admin"
+    },
+    "withdrawals": {
+      "schema": "WithdrawalRequest",
+      "description": "Admin withdrawals"
+    },
+    "settings/admin_withdrawals": {
+      "schema": "object",
+      "description": "Admin personal payment details for withdrawing"
+    },
+    "reports": {
+      "schema": "UserReport",
+      "description": "User moderation reports"
+    },
+    "announcements": {
+      "schema": "Announcement",
+      "description": "Public announcements"
+    }
+  }
+}

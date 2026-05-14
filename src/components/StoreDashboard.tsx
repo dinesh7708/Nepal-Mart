@@ -726,55 +726,29 @@ export function StoreDashboard({
                       </div>
 
                       {/* eSewa */}
-                      <div className="p-6 rounded-2xl border border-slate-100 space-y-4">
+                      <div className="p-6 rounded-2xl border border-slate-100 bg-slate-50 opacity-60 space-y-4">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-3">
                             <div className="w-10 h-10 bg-green-50 text-green-600 rounded-xl flex items-center justify-center font-black text-[10px]">eS</div>
                             <span className="text-sm font-black text-slate-800 uppercase tracking-tight">eSewa Wallet</span>
                           </div>
-                          <button 
-                            type="button"
-                            onClick={() => setPaymentSettingsForm({...paymentSettingsForm, esewaEnabled: !paymentSettingsForm.esewaEnabled})}
-                          >
-                            {paymentSettingsForm.esewaEnabled ? <ToggleRight className="w-8 h-8 text-primary" /> : <ToggleLeft className="w-8 h-8 text-slate-300" />}
-                          </button>
+                          <div className="text-[8px] font-black uppercase text-amber-500 bg-amber-50 px-2 py-1 rounded">Maintenance</div>
                         </div>
-                        {paymentSettingsForm.esewaEnabled && (
-                          <input 
-                            className="w-full bg-slate-50 border border-slate-100 rounded-xl py-3 px-4 text-xs font-bold outline-none border-dashed"
-                            placeholder="eSewa ID (Mobile Number)"
-                            value={paymentSettingsForm.esewaId || ''}
-                            onChange={(e) => setPaymentSettingsForm({...paymentSettingsForm, esewaId: e.target.value})}
-                          />
-                        )}
                       </div>
 
                       {/* Khalti */}
-                      <div className="p-6 rounded-2xl border border-slate-100 space-y-4">
+                      <div className="p-6 rounded-2xl border border-slate-100 bg-slate-50 opacity-60 space-y-4">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-3">
                             <div className="w-10 h-10 bg-purple-50 text-purple-600 rounded-xl flex items-center justify-center font-black text-[10px]">Kh</div>
                             <span className="text-sm font-black text-slate-800 uppercase tracking-tight">Khalti Wallet</span>
                           </div>
-                          <button 
-                            type="button"
-                            onClick={() => setPaymentSettingsForm({...paymentSettingsForm, khaltiEnabled: !paymentSettingsForm.khaltiEnabled})}
-                          >
-                            {paymentSettingsForm.khaltiEnabled ? <ToggleRight className="w-8 h-8 text-primary" /> : <ToggleLeft className="w-8 h-8 text-slate-300" />}
-                          </button>
+                          <div className="text-[8px] font-black uppercase text-amber-500 bg-amber-50 px-2 py-1 rounded">Maintenance</div>
                         </div>
-                        {paymentSettingsForm.khaltiEnabled && (
-                          <input 
-                            className="w-full bg-slate-50 border border-slate-100 rounded-xl py-3 px-4 text-xs font-bold outline-none border-dashed"
-                            placeholder="Khalti Mobile Number"
-                            value={paymentSettingsForm.khaltiId || ''}
-                            onChange={(e) => setPaymentSettingsForm({...paymentSettingsForm, khaltiId: e.target.value})}
-                          />
-                        )}
                       </div>
 
                       {/* Bank */}
-                      <div className="p-6 rounded-2xl border border-slate-100 space-y-4">
+                      <div className="p-6 rounded-2xl border border-slate-100 bg-slate-50 opacity-60 space-y-4">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-3">
                             <div className="w-10 h-10 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center">
@@ -782,39 +756,12 @@ export function StoreDashboard({
                             </div>
                             <span className="text-sm font-black text-slate-800 uppercase tracking-tight">Bank Transfer</span>
                           </div>
-                          <button 
-                            type="button"
-                            onClick={() => setPaymentSettingsForm({...paymentSettingsForm, bankEnabled: !paymentSettingsForm.bankEnabled})}
-                          >
-                            {paymentSettingsForm.bankEnabled ? <ToggleRight className="w-8 h-8 text-primary" /> : <ToggleLeft className="w-8 h-8 text-slate-300" />}
-                          </button>
+                          <div className="text-[8px] font-black uppercase text-amber-500 bg-amber-50 px-2 py-1 rounded">Maintenance</div>
                         </div>
-                        {paymentSettingsForm.bankEnabled && (
-                          <div className="space-y-2">
-                             <input 
-                               className="w-full bg-slate-50 border border-slate-100 rounded-xl py-2 px-4 text-[10px] font-bold outline-none"
-                               placeholder="Bank Name"
-                               value={paymentSettingsForm.bankName || ''}
-                               onChange={(e) => setPaymentSettingsForm({...paymentSettingsForm, bankName: e.target.value})}
-                             />
-                             <input 
-                               className="w-full bg-slate-50 border border-slate-100 rounded-xl py-2 px-4 text-[10px] font-bold outline-none"
-                               placeholder="Account Holder Name"
-                               value={paymentSettingsForm.accountHolder || ''}
-                               onChange={(e) => setPaymentSettingsForm({...paymentSettingsForm, accountHolder: e.target.value})}
-                             />
-                             <input 
-                               className="w-full bg-slate-50 border border-slate-100 rounded-xl py-2 px-4 text-[10px] font-bold outline-none"
-                               placeholder="Account Number"
-                               value={paymentSettingsForm.accountNumber || ''}
-                               onChange={(e) => setPaymentSettingsForm({...paymentSettingsForm, accountNumber: e.target.value})}
-                             />
-                          </div>
-                        )}
                       </div>
 
                       {/* QR */}
-                      <div className="p-6 rounded-2xl border border-slate-100 space-y-4 col-span-1 md:col-span-2">
+                      <div className="p-6 rounded-2xl border border-slate-100 bg-slate-50 opacity-60 space-y-4 col-span-1 md:col-span-2">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-3">
                             <div className="w-10 h-10 bg-slate-900 text-white rounded-xl flex items-center justify-center">
@@ -822,48 +769,8 @@ export function StoreDashboard({
                             </div>
                             <span className="text-sm font-black text-slate-800 uppercase tracking-tight">QR Code Payment</span>
                           </div>
-                          <button 
-                            type="button"
-                            onClick={() => setPaymentSettingsForm({...paymentSettingsForm, qrEnabled: !paymentSettingsForm.qrEnabled})}
-                          >
-                            {paymentSettingsForm.qrEnabled ? <ToggleRight className="w-8 h-8 text-primary" /> : <ToggleLeft className="w-8 h-8 text-slate-300" />}
-                          </button>
+                          <div className="text-[8px] font-black uppercase text-amber-500 bg-amber-50 px-2 py-1 rounded">Maintenance</div>
                         </div>
-                        {paymentSettingsForm.qrEnabled && (
-                          <div className="flex flex-col md:flex-row gap-6">
-                             <div className="w-40 h-40 bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl flex flex-col items-center justify-center overflow-hidden shrink-0">
-                                {paymentSettingsForm.qrImage ? (
-                                  <img src={paymentSettingsForm.qrImage} className="w-full h-full object-cover" />
-                                ) : (
-                                  <>
-                                    <Upload className="w-6 h-6 text-slate-300" />
-                                    <span className="text-[8px] font-black text-slate-300 uppercase mt-2">Upload QR</span>
-                                  </>
-                                )}
-                             </div>
-                             <div className="flex-1 space-y-4">
-                                <div className="space-y-1">
-                                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest px-1">QR Image URL</label>
-                                  <input 
-                                    className="w-full bg-slate-50 border border-slate-100 rounded-xl py-3 px-4 text-xs font-bold outline-none"
-                                    placeholder="Paste URL of your payment QR code"
-                                    value={paymentSettingsForm.qrImage || ''}
-                                    onChange={(e) => setPaymentSettingsForm({...paymentSettingsForm, qrImage: e.target.value})}
-                                  />
-                                </div>
-                                <div className="space-y-1">
-                                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest px-1">Special Instructions</label>
-                                  <textarea 
-                                    className="w-full bg-slate-50 border border-slate-100 rounded-xl py-3 px-4 text-xs font-bold outline-none resize-none"
-                                    placeholder="Any message for customer during payment..."
-                                    rows={2}
-                                    value={paymentSettingsForm.instructions || ''}
-                                    onChange={(e) => setPaymentSettingsForm({...paymentSettingsForm, instructions: e.target.value})}
-                                  />
-                                </div>
-                             </div>
-                          </div>
-                        )}
                       </div>
                     </div>
                     <button 

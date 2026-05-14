@@ -89,17 +89,43 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // Stores (Allow owner to update payment settings, deny if suspended)
+    // Users
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.auth.uid == userId;
+      allow update: if isSignedIn() && request.auth.uid == userId &&
+                      incoming().email == existing().email;
+    }
+
+    // Stores (Allow owner to update specific fields, deny status change)
     match /stores/{storeId} {
       allow read: if true;
-      allow create: if isSignedIn();
+      allow create: if isSignedIn() && 
+                    incoming().ownerId == request.auth.uid &&
+                    incoming().status == 'pending' &&
+                    incoming().createdAt == request.time.toMillis();
       allow update: if isSignedIn() && (
                       isAdmin() || 
                       (resource.data.ownerId == request.auth.uid && 
                        resource.data.status != 'suspended' &&
                        incoming().status == existing().status &&
-                       incoming().diff(existing()).affectedKeys().hasOnly(['paymentSettings', 'openingTime', 'closingTime', 'contactNumber', 'address']))
+                       incoming().ownerId == existing().ownerId &&
+                       incoming().diff(existing()).affectedKeys().hasAny(['paymentSettings', 'openingTime', 'closingTime', 'contactNumber', 'address', 'logo', 'banner', 'isAvailable', 'category', 'type', 'name']))
                     );
+    }
+
+    // Products (Public read, Store owner or Admin write)
+    match /products/{productId} {
+      allow read: if true;
+      allow create: if isSignedIn() && (
+                      isAdmin() || 
+                      get(/databases/$(database)/documents/stores/$(incoming().storeId)).data.ownerId == request.auth.uid
+                    );
+      allow update: if isSignedIn() && (
+                      isAdmin() || 
+                      get(/databases/$(database)/documents/stores/$(existing().storeId)).data.ownerId == request.auth.uid
+                    );
+      allow delete: if isAdmin() || (isSignedIn() && get(/databases/$(database)/documents/stores/$(existing().storeId)).data.ownerId == request.auth.uid);
     }
 
     // Orders (Handle payment status and commission)
@@ -107,17 +133,22 @@ service cloud.firestore {
       allow read: if isSignedIn() && (
                     isAdmin() || 
                     resource.data.customerId == request.auth.uid || 
-                    get(/databases/$(database)/documents/stores/$(resource.data.storeId)).data.ownerId == request.auth.uid
+                    resource.data.storeOwnerId == request.auth.uid
+                  );
+      allow list: if isSignedIn() && (
+                    isAdmin() || 
+                    resource.data.customerId == request.auth.uid ||
+                    resource.data.storeOwnerId == request.auth.uid
                   );
       allow create: if isSignedIn() && 
                     incoming().customerId == request.auth.uid &&
-                    incoming().paymentStatus == 'pending';
+                    incoming().storeOwnerId == get(/databases/$(database)/documents/stores/$(incoming().storeId)).data.ownerId;
       allow update: if isSignedIn() && (
                       isAdmin() || 
-                      (get(/databases/$(database)/documents/stores/$(resource.data.storeId)).data.ownerId == request.auth.uid &&
+                      (resource.data.storeOwnerId == request.auth.uid &&
                        incoming().diff(existing()).affectedKeys().hasAny(['status', 'paymentStatus', 'commissionAmount', 'storeEarnings'])) ||
                       (resource.data.customerId == request.auth.uid &&
-                       incoming().diff(existing()).affectedKeys().hasOnly(['paymentScreenshot', 'paymentStatus']))
+                       incoming().diff(existing()).affectedKeys().hasAny(['paymentScreenshot', 'paymentStatus', 'status', 'updatedAt']))
                     );
     }
 

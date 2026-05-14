@@ -85,6 +85,66 @@
         "type": { "type": "string", "enum": ["safety", "update", "promotion"] },
         "createdAt": { "type": "number" }
       }
+    },
+    "Store": {
+      "title": "Store Profile",
+      "description": "Partner store registration and profile",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "name": { "type": "string" },
+        "category": { "type": "string" },
+        "address": { "type": "string" },
+        "contactNumber": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected", "suspended"] },
+        "createdAt": { "type": "number" },
+        "verificationDetails": { "type": "object" }
+      }
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Customer order document",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "customerId": { "type": "string" },
+        "storeId": { "type": "string" },
+        "storeOwnerId": { "type": "string" },
+        "totalPrice": { "type": "number" },
+        "status": { "type": "string" },
+        "paymentMethod": { "type": "string" },
+        "createdAt": { "type": "number" }
+      }
+    },
+    "User": {
+      "title": "User Profile",
+      "description": "User account information",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "isPartner": { "type": "boolean" },
+        "storeId": { "type": "string" }
+      }
+    },
+    "Product": {
+      "title": "Product",
+      "description": "Item listed for sale by a store",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "price": { "type": "number" },
+        "unit": { "type": "string" },
+        "category": { "type": "string" },
+        "image": { "type": "string" },
+        "storeId": { "type": "string" },
+        "stock": { "type": "number" },
+        "isAvailable": { "type": "boolean" }
+      }
     }
   },
   "firestore": {
@@ -115,6 +175,22 @@
     "announcements": {
       "schema": "Announcement",
       "description": "Public announcements"
+    },
+    "stores": {
+      "schema": "Store",
+      "description": "Partner stores collection"
+    },
+    "products": {
+      "schema": "Product",
+      "description": "Collection of all products available in the marketplace"
+    },
+    "orders": {
+      "schema": "Order",
+      "description": "Customer orders"
+    },
+    "users": {
+        "schema": "User",
+        "description": "User profiles"
     }
   }
 }

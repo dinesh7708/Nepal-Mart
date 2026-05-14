@@ -46,9 +46,7 @@ import { LoyaltyDashboard } from './components/LoyaltyDashboard';
 import { LOYALTY_TIERS, POINTS_CONVERSION_RATE, REDEMPTION_VALUE } from './constants';
 import { TRANSLATIONS, Language } from './i18n';
 
-import { auth, logout, db } from './lib/firebase';
-import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
-import { doc, onSnapshot, setDoc, updateDoc, collection, addDoc, serverTimestamp, getDoc } from 'firebase/firestore';
+import { supabase } from './lib/supabase';
 import { LoginModal } from './components/LoginModal';
 import { PartnerOnboarding } from './components/PartnerOnboarding';
 import { StoreDashboard } from './components/StoreDashboard';
@@ -58,6 +56,7 @@ import { LegalCenter } from './components/LegalCenter';
 import { SupportCenter } from './components/SupportCenter';
 import { CheckoutModal } from './components/CheckoutModal';
 import { ReportModal } from './components/ReportModal';
+import { RoleSelection } from './components/RoleSelection';
 
 export default function App() {
   const [lang, setLang] = useState<Language>('en');
@@ -74,6 +73,7 @@ export default function App() {
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isLoginOpen, setIsLoginOpen] = useState(false);
+  const [showRoleSelection, setShowRoleSelection] = useState(false);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [address, setAddress] = useState('Kathmandu, Nepal');
   const [orders, setOrders] = useState<Order[]>([]);
@@ -100,32 +100,70 @@ export default function App() {
   });
 
   useEffect(() => {
-    if (!db) return;
-    const unsub = onSnapshot(doc(db, 'settings', 'support'), (snapshot) => {
-      if (snapshot.exists()) {
-        setSupportSettings(snapshot.data() as SupportSettings);
+    // Supabase real-time for settings
+    const fetchSettings = async () => {
+      const { data } = await supabase
+        .from('settings')
+        .select('*')
+        .eq('id', 'support')
+        .single();
+      if (data) {
+        setSupportSettings(data as SupportSettings);
       }
-    });
+    };
+    fetchSettings();
 
-    let unsubTickets: (() => void) | null = null;
-    let unsubReports: (() => void) | null = null;
+    const settingsChannel = supabase
+      .channel('settings_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'settings', filter: 'id=eq.support' }, (payload) => {
+        setSupportSettings(payload.new as SupportSettings);
+      })
+      .subscribe();
+
+    let ticketsChannel: any = null;
+    let reportsChannel: any = null;
+    let ordersChannel: any = null;
 
     if (isAdmin) {
-      unsubTickets = onSnapshot(collection(db, 'tickets'), (snapshot) => {
-        const docs = snapshot.docs.map(d => ({ ...d.data(), id: d.id } as SupportTicket));
-        setTickets(docs.sort((a, b) => b.createdAt - a.createdAt));
-      });
+      const fetchAdminData = async () => {
+        const { data: ticketsData } = await supabase.from('tickets').select('*').order('createdAt', { ascending: false });
+        if (ticketsData) setTickets(ticketsData as SupportTicket[]);
 
-      unsubReports = onSnapshot(collection(db, 'reports'), (snapshot) => {
-        const docs = snapshot.docs.map(d => ({ ...d.data(), id: d.id } as UserReport));
-        setReports(docs.sort((a, b) => b.createdAt - a.createdAt));
-      });
+        const { data: reportsData } = await supabase.from('reports').select('*').order('createdAt', { ascending: false });
+        if (reportsData) setReports(reportsData as UserReport[]);
+
+        const { data: allOrdersData } = await supabase.from('orders').select('*').order('createdAt', { ascending: false });
+        if (allOrdersData) setOrders(allOrdersData as Order[]);
+      };
+      fetchAdminData();
+
+      ticketsChannel = supabase
+        .channel('admin_tickets')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'tickets' }, () => {
+          fetchAdminData();
+        })
+        .subscribe();
+
+      reportsChannel = supabase
+        .channel('admin_reports')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'reports' }, () => {
+          fetchAdminData();
+        })
+        .subscribe();
+
+      ordersChannel = supabase
+        .channel('admin_orders')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
+          fetchAdminData();
+        })
+        .subscribe();
     }
 
     return () => {
-      unsub();
-      if (unsubTickets) unsubTickets();
-      if (unsubReports) unsubReports();
+      supabase.removeChannel(settingsChannel);
+      if (ticketsChannel) supabase.removeChannel(ticketsChannel);
+      if (reportsChannel) supabase.removeChannel(reportsChannel);
+      if (ordersChannel) supabase.removeChannel(ordersChannel);
     };
   }, [isAdmin]);
 
@@ -142,37 +180,25 @@ export default function App() {
       createdAt: Date.now()
     };
 
-    if (db) {
-       await addDoc(collection(db, 'reports'), newReport);
-    } else {
-       setReports(prev => [{ ...newReport, id: Math.random().toString() } as UserReport, ...prev]);
+    const { error } = await supabase.from('reports').insert(newReport);
+    if (error) {
+      console.error("Error submitting report:", error);
+      setReports(prev => [{ ...newReport, id: Math.random().toString() } as UserReport, ...prev]);
     }
   };
 
   const handleSupportTicket = async (ticket: Partial<SupportTicket>) => {
-    if (!db) {
-       // Fallback for no DB
-       const newTicket: SupportTicket = {
-         id: `t-${Math.random().toString(36).substr(2, 9)}`,
-         name: ticket.name || 'Anonymous',
-         email: ticket.email || '',
-         subject: ticket.subject || 'other',
-         message: ticket.message || '',
-         status: 'open',
-         createdAt: Date.now()
-       };
-       setTickets(prev => [newTicket, ...prev]);
-       return;
-    }
+    const newTicketData = {
+      ...ticket,
+      status: 'open',
+      createdAt: Date.now()
+    };
 
-    try {
-      await addDoc(collection(db, 'tickets'), {
-        ...ticket,
-        status: 'open',
-        createdAt: Date.now() // toMillis for rule check if request.time is used
-      });
-    } catch (e) {
-      console.error("Error submitting ticket:", e);
+    const { error } = await supabase.from('tickets').insert(newTicketData);
+    if (error) {
+      console.error("Error submitting ticket:", error);
+      // Fallback
+      setTickets(prev => [{ ...newTicketData, id: `t-${Math.random().toString(36).substr(2, 9)}` } as SupportTicket, ...prev]);
     }
   };
 
@@ -248,36 +274,62 @@ export default function App() {
   const [user, setUser] = useState<UserProfile | null>(null);
 
   useEffect(() => {
-    const handleMockLogin = () => {
-      setUser({
-        id: 'guest-123',
-        name: 'Admin User (Demo)',
-        email: 'admin@nepalmart.com',
-        points: 500,
-        totalSpent: 12500,
-        tier: 'gold',
-        referralCode: 'PLATFORM_ADMIN',
-        isPartner: true, 
-        storeId: 's1'
-      });
+    const handleMockLogin = async (e: any) => {
+      const detail = e.detail || {};
+      
+      const userName = detail.name || (detail.phone ? `User ${detail.phone}` : 'Admin User (Demo)');
+      // Try real anonymous login to have a valid session for Supabase
+      try {
+        const { data: { user: authUser } } = await supabase.auth.signInAnonymously();
+        if (authUser) {
+          const userObj: UserProfile = {
+            id: authUser.id,
+            name: userName,
+            email: detail.phone ? `${detail.phone}@nepalmart.com` : 'admin@nepalmart.com',
+            points: 500,
+            totalSpent: 12500,
+            tier: 'gold',
+            referralCode: detail.phone ? 'MEMBER' : 'PLATFORM_ADMIN',
+            isPartner: detail.phone ? false : true, 
+            storeId: detail.phone ? null : 's1'
+          };
 
-      setMyStore({
-        id: 's1',
-        ownerId: 'guest-123',
-        name: 'Kathmandu Daily Mart',
-        category: 'Grocery',
-        address: 'Jawalakhel, Lalitpur',
-        contactNumber: '9841XXXXXX',
-        logo: 'https://images.unsplash.com/photo-1534723452862-4c874e70d98a?q=80&w=100&h=100&auto=format&fit=crop',
-        status: 'approved',
-        createdAt: Date.now(),
-        deliveryCharge: 40,
-        minOrderAmount: 200,
-        deliveryRadius: 5,
-        freeDeliveryThreshold: 1000
-      });
+          setUser(userObj);
+          if (!userObj.isPartner) {
+            setShowRoleSelection(true);
+          }
 
-      alert("Demo Mode Activated! I've also set you up as a Partner Store owner.");
+          // Save to Supabase
+          try {
+            await supabase.from('users').upsert(userObj);
+          } catch (e) {
+            console.error("Failed to sync user to Supabase:", e);
+          }
+        }
+      } catch (err) {
+        console.log("[DEMO] Supabase anonymous login failed:", err);
+      }
+
+      if (!detail.phone) {
+        setMyStore({
+          id: 's1',
+          ownerId: 'guest-123',
+          name: 'Kathmandu Daily Mart',
+          category: 'Grocery',
+          address: 'Jawalakhel, Lalitpur',
+          contactNumber: '9841XXXXXX',
+          logo: 'https://images.unsplash.com/photo-1534723452862-4c874e70d98a?q=80&w=100&h=100&auto=format&fit=crop',
+          status: 'approved',
+          createdAt: Date.now(),
+          deliveryCharge: 40,
+          minOrderAmount: 200,
+          deliveryRadius: 5,
+          freeDeliveryThreshold: 1000
+        });
+        alert("Demo Mode Activated! I've also set you up as a Partner Store owner.");
+      } else {
+        alert(`Namaste ${userName}! Welcome to Nepal Mart.`);
+      }
     };
 
     window.addEventListener('mock-login', handleMockLogin);
@@ -288,30 +340,107 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!auth || !db) return;
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (firebaseUser) {
-        // Check if user is admin
-        const adminDoc = await getDoc(doc(db, 'admins', firebaseUser.uid));
-        setIsAdmin(adminDoc.exists());
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (session?.user) {
+        const supabaseUser = session.user;
+        // Check if user is admin - in Supabase we can use metadata or a separate profiles/admins table
+        const { data: adminDoc } = await supabase.from('admins').select('*').eq('id', supabaseUser.id).single();
+        setIsAdmin(!!adminDoc);
 
-        // In a real app, we would fetch the user profile from Firestore here
-        setUser({
-          id: firebaseUser.uid,
-          name: firebaseUser.displayName || 'Nepal Mart User',
-          email: firebaseUser.email || '',
-          points: 0, // Mocked for now, would come from DB
-          totalSpent: 0, // Mocked for now, would come from DB
-          tier: 'bronze',
-          referralCode: `MART${firebaseUser.uid.slice(0, 5).toUpperCase()}`,
-        });
+        const { data: userData } = await supabase.from('users').select('*').eq('id', supabaseUser.id).single();
+        
+        if (userData) {
+          setUser(userData as UserProfile);
+        } else {
+          // Create basic profile
+          const userObj: UserProfile = {
+            id: supabaseUser.id,
+            name: supabaseUser.user_metadata?.full_name || 'Nepal Mart User',
+            email: supabaseUser.email || '',
+            points: 0, 
+            totalSpent: 0, 
+            tier: 'bronze',
+            referralCode: `MART${supabaseUser.id.slice(0, 5).toUpperCase()}`,
+          };
+          setUser(userObj);
+          await supabase.from('users').insert(userObj);
+          if (!userObj.isPartner) {
+            setShowRoleSelection(true);
+          }
+        }
       } else {
         setUser(null);
         setIsAdmin(false);
       }
     });
-    return () => unsubscribe();
+
+    return () => subscription.unsubscribe();
   }, []);
+
+  useEffect(() => {
+    const fetchBaseData = async () => {
+      const { data: stores } = await supabase.from('stores').select('*');
+      if (stores) setAllStores(stores as StoreProfile[]);
+
+      const { data: products } = await supabase.from('products').select('*');
+      if (products) setAllProducts(products as Product[]);
+    };
+    fetchBaseData();
+
+    const storesChannel = supabase
+      .channel('public_stores')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'stores' }, () => {
+        fetchBaseData();
+      })
+      .subscribe();
+
+    const productsChannel = supabase
+      .channel('public_products')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, () => {
+        fetchBaseData();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(storesChannel);
+      supabase.removeChannel(productsChannel);
+    };
+  }, []);
+
+  // Listen for user-specific orders
+  useEffect(() => {
+    if (!user || isAdmin) return;
+
+    const fetchOrders = async () => {
+      let q = supabase.from('orders').select('*');
+      
+      if (user.storeId) {
+        q = q.or(`customerId.eq.${user.id},storeId.eq.${user.storeId}`);
+      } else {
+        q = q.eq('customerId', user.id);
+      }
+
+      const { data } = await q.order('createdAt', { ascending: false });
+      if (data) setOrders(data as Order[]);
+    };
+    fetchOrders();
+
+    const ordersChannel = supabase
+      .channel('user_orders')
+      .on('postgres_changes', { 
+        event: '*', 
+        schema: 'public', 
+        table: 'orders',
+        filter: user.storeId ? undefined : `customerId=eq.${user.id}` 
+      }, () => {
+        fetchOrders();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(ordersChannel);
+    };
+  }, [user, isAdmin]);
 
   const addToCart = (product: Product, instructions?: string) => {
     setCartItems(prev => {
@@ -364,38 +493,56 @@ export default function App() {
     setIsCheckoutOpen(true);
   };
 
-  const completeCheckout = (paymentDetails: { method: Order['paymentMethod'], transactionId?: string, screenshot?: string }) => {
+  const completeCheckout = async (paymentDetails: { 
+    method: Order['paymentMethod'], 
+    transactionId?: string, 
+    screenshot?: string,
+    razorpayOrderId?: string,
+    razorpayPaymentId?: string,
+    razorpaySignature?: string,
+    status?: Order['paymentStatus']
+  }) => {
     const total = cartItems.reduce((acc, item) => acc + item.price * item.quantity, 0);
     const tier = LOYALTY_TIERS.find(t => t.id === user?.tier) || LOYALTY_TIERS[0];
     const pointsEarned = Math.floor((total / POINTS_CONVERSION_RATE) * tier.pointsMultiplier);
     
+    // Only update loyalty and clear cart if payment is confirmed
     if (user) {
-      const newTotalSpent = user.totalSpent + total;
-      let newTier = user.tier;
-      
-      const nextTier = LOYALTY_TIERS.slice().reverse().find(t => newTotalSpent >= t.minSpend);
-      if (nextTier) newTier = nextTier.id;
+       const newTotalSpent = user.totalSpent + total;
+       let newTier = user.tier;
+       const nextTier = LOYALTY_TIERS.slice().reverse().find(t => newTotalSpent >= t.minSpend);
+       if (nextTier) newTier = nextTier.id;
 
-      setUser(prev => prev ? ({
-        ...prev,
-        points: prev.points + pointsEarned,
-        totalSpent: newTotalSpent,
-        tier: newTier
-      }) : null);
+       setUser(prev => prev ? ({
+         ...prev,
+         points: prev.points + pointsEarned,
+         totalSpent: newTotalSpent,
+         tier: newTier
+       }) : null);
+       
+       // Sync to Supabase
+       supabase.from('users').update({
+         points: user.points + pointsEarned,
+         totalSpent: newTotalSpent,
+         tier: newTier
+       }).eq('id', user.id).then(({ error }) => {
+         if (error) console.error("Error updating user profile:", error);
+       });
     }
 
-    // Record order with commission logic
     const storeId = cartItems[0]?.storeId;
     const store = allStores.find(s => s.id === storeId);
+    const storeOwnerId = store?.ownerId;
     const commissionRate = store?.commissionRate || globalCommission;
     const commissionAmount = (total * commissionRate) / 100;
     const storeEarnings = total - commissionAmount;
 
     const newOrder: Order = {
-      id: `ord-${Math.random().toString(36).substr(2, 9)}`,
+      id: paymentDetails.transactionId || `ord-${Math.random().toString(36).substr(2, 9)}`,
       userId: user?.id || 'guest',
       customerId: user?.id || 'guest',
       storeId: storeId || 'unknown',
+      storeOwnerId: storeOwnerId || 'unknown',
       items: [...cartItems],
       totalPrice: total,
       subtotal: total,
@@ -408,64 +555,118 @@ export default function App() {
       createdAt: Date.now(),
       deliveryAddress: address,
       paymentMethod: paymentDetails.method,
-      paymentStatus: paymentDetails.method === 'cod' ? 'pending' : 'awaiting_verification',
+      paymentStatus: paymentDetails.status || (paymentDetails.method === 'cod' ? 'pending' : (paymentDetails.method === 'esewa' ? 'pending' : 'awaiting_verification')),
       transactionId: paymentDetails.transactionId,
       paymentScreenshot: paymentDetails.screenshot
     };
 
     setOrders(prev => [newOrder, ...prev]);
+    
     setActiveOrder(newOrder);
+    setOrderStatus('processing');
     setCartItems([]);
     setIsCartOpen(false);
     setIsCheckoutOpen(false);
-    setOrderStatus('processing');
+    setActiveTab('orders');
     
-    // Simulate delivery progress for the active order
+    try {
+      await supabase.from('orders').insert(newOrder);
+    } catch (err) {
+      console.error("Supabase Order Error:", err);
+    }
+    
+    // Auto-simulation for demo/testing
     setTimeout(() => {
-      setOrderStatus('shipped');
       setOrders(prev => prev.map(o => o.id === newOrder.id ? { ...o, status: 'shipped' } : o));
     }, 5000);
     setTimeout(() => {
-      setOrderStatus('delivered');
-      setActiveOrder(null);
       setOrders(prev => prev.map(o => o.id === newOrder.id ? { ...o, status: 'delivered' } : o));
     }, 15000);
 
-    setActiveTab('orders');
+    return newOrder.id;
   };
 
-  const handlePartnerComplete = (data: any) => {
+  const handlePartnerComplete = async (data: any) => {
+    if (!user) {
+      setIsLoginOpen(true);
+      return;
+    }
+
+    const storeId = `s-${Math.random().toString(36).substr(2, 9)}`;
     const newStore: StoreProfile = {
-      id: `s-${Math.random().toString(36).substr(2, 9)}`,
-      ownerId: user?.id || 'unknown',
+      id: storeId,
+      ownerId: user.id,
       name: data.storeName,
+      type: data.type,
       category: data.category,
       address: data.address,
-      contactNumber: data.mobile,
-      logo: 'https://images.unsplash.com/photo-1534723452862-4c874e70d98a?q=80&w=100&h=100&auto=format&fit=crop',
+      contactNumber: data.phone,
+      logo: data.logo,
       status: 'pending',
       createdAt: Date.now(),
       deliveryCharge: 50,
       minOrderAmount: 150,
       deliveryRadius: 3,
-      openingTime: data.openingTime || "09:00 AM",
-      closingTime: data.closingTime || "09:00 PM",
+      openingTime: data.openingTime,
+      closingTime: data.closingTime,
+      location: data.location,
       verificationDetails: {
         ownerFullName: data.ownerFullName,
         mobileVerified: true,
+        citizenshipNumber: data.citizenshipNumber,
+        panVatNumber: data.panVatNumber,
         documents: data.documents,
         submittedAt: Date.now()
+      },
+      paymentSettings: {
+        codEnabled: true,
+        esewaEnabled: false,
+        khaltiEnabled: false,
+        qrEnabled: !!data.documents.qrCode,
+        qrImage: data.documents.qrCode,
+        bankEnabled: !!data.bankDetails?.accountNumber,
+        bankName: data.bankDetails?.bankName,
+        accountHolder: data.bankDetails?.accountHolder,
+        accountNumber: data.bankDetails?.accountNumber,
+        ifscCode: data.bankDetails?.ifscCode,
+        mobileNumber: data.bankDetails?.mobileNumber,
       }
     };
-    setAllStores(prev => [...prev, newStore]);
-    setMyStore(newStore);
-    setUser(prev => prev ? {
-      ...prev,
-      isPartner: true,
-      storeId: newStore.id
-    } : null);
-    alert("Store verification submitted! Our admin team will review your documents within 24-48 hours.");
-    setActiveTab('dashboard');
+
+    try {
+      // Save to Supabase
+      await supabase.from('stores').insert(newStore);
+      
+      // Update user profile in Supabase
+      await supabase.from('users').update({
+        isPartner: true,
+        storeId: storeId
+      }).eq('id', user.id);
+
+      // Add admin notification
+      await supabase.from('tickets').insert({
+        name: data.ownerFullName,
+        email: user.email,
+        subject: 'new_store_registration',
+        message: `New store registration request from "${data.storeName}". Please review the documents.`,
+        status: 'open',
+        createdAt: Date.now()
+      });
+
+      setAllStores(prev => [...prev, newStore]);
+      setMyStore(newStore);
+      setUser(prev => prev ? {
+        ...prev,
+        isPartner: true,
+        storeId: storeId
+      } : null);
+
+      alert("Store verification submitted! Our admin team will review your documents within 24-48 hours.");
+      setActiveTab('shop');
+    } catch (e) {
+      console.error("Error submitting store:", e);
+      alert("Failed to submit registration. Please try again.");
+    }
   };
 
   const getItemQuantity = (productId: string) => {
@@ -629,7 +830,10 @@ export default function App() {
               </button>
               
               <button 
-                onClick={() => logout()}
+                onClick={async () => {
+                  const { error } = await supabase.auth.signOut();
+                  if (error) console.error(error);
+                }}
                 className="text-[10px] uppercase font-bold text-slate-400 hover:text-accent transition-colors hidden lg:block"
               >
                 Logout
@@ -687,16 +891,24 @@ export default function App() {
             store={myStore}
             products={allProducts.filter(p => p.storeId === myStore.id)}
             orders={orders.filter(o => o.storeId === myStore.id)}
-            onUpdateProducts={(updatedStoreProducts) => {
+            onUpdateProducts={async (updatedStoreProducts) => {
               const otherProducts = allProducts.filter(p => p.storeId !== myStore.id);
               setAllProducts([...otherProducts, ...updatedStoreProducts]);
+              
+              // Find the newly added product or modified one
+              // For simplicity, we just upsert all updated ones
+              for (const product of updatedStoreProducts) {
+                await supabase.from('products').upsert(product);
+              }
             }}
-            onUpdateOrderStatus={(id, status) => {
+            onUpdateOrderStatus={async (id, status) => {
               setOrders(prev => prev.map(o => o.id === id ? { ...o, status } : o));
+              await supabase.from('orders').update({ status }).eq('id', id);
             }}
-            onUpdateStore={(updatedStore) => {
+            onUpdateStore={async (updatedStore) => {
               setMyStore(updatedStore);
               setAllStores(prev => prev.map(s => s.id === updatedStore.id ? updatedStore : s));
+              await supabase.from('stores').update(updatedStore).eq('id', updatedStore.id);
             }}
           />
         ) : activeTab === 'orders' ? (
@@ -766,38 +978,40 @@ export default function App() {
             tickets={tickets}
             onResolveTicket={(id) => setTickets(prev => prev.map(t => t.id === id ? { ...t, status: 'closed' } : t))}
             reports={reports}
-            onResolveReport={(id) => {
-              if (db) updateDoc(doc(db, 'reports', id), { status: 'resolved' });
-              else setReports(prev => prev.map(r => r.id === id ? { ...r, status: 'resolved' } : r));
+            onResolveReport={async (id) => {
+              await supabase.from('reports').update({ status: 'resolved' }).eq('id', id);
             }}
-            onSuspendStore={(id) => {
-              setAllStores(prev => prev.map(s => s.id === id ? { ...s, status: s.status === 'suspended' ? 'approved' : 'suspended' } : s));
+            onSuspendStore={async (id) => {
+              const store = allStores.find(s => s.id === id);
+              if (store) {
+                const newStatus = store.status === 'suspended' ? 'approved' : 'suspended';
+                await supabase.from('stores').update({ status: newStatus }).eq('id', id);
+              }
             }}
             globalCommission={globalCommission}
             onUpdateGlobalCommission={setGlobalCommission}
             supportSettings={supportSettings}
             onUpdateSupportSettings={async (settings) => {
-              if (db) {
-                await setDoc(doc(db, 'settings', 'support'), { ...settings, updatedAt: Date.now() });
-              } else {
-                setSupportSettings({ ...settings, updatedAt: Date.now() });
+              await supabase.from('settings').upsert({ id: 'support', ...settings, updatedAt: Date.now() });
+              setSupportSettings({ ...settings, updatedAt: Date.now() });
+            }}
+            onUpdateStoreCommission={async (id, rate) => {
+              await supabase.from('stores').update({ commissionRate: rate }).eq('id', id);
+            }}
+            onApproveStore={async (id) => {
+              await supabase.from('stores').update({ status: 'approved' }).eq('id', id);
+              
+              // Also ensure user profile reflects partner status fully
+              const store = allStores.find(s => s.id === id);
+              if (store) {
+                await supabase.from('users').update({ isPartner: true, storeId: id }).eq('id', store.ownerId);
               }
             }}
-            onUpdateStoreCommission={(id, rate) => {
-              setAllStores(prev => prev.map(s => s.id === id ? { ...s, commissionRate: rate } : s));
-            }}
-            onApproveStore={(id) => {
-              setAllStores(prev => prev.map(s => s.id === id ? { ...s, status: 'approved' } : s));
-            }}
-            onRejectStore={(id, reason) => {
-              setAllStores(prev => prev.map(s => s.id === id ? { 
-                ...s, 
+            onRejectStore={async (id, reason) => {
+              await supabase.from('stores').update({ 
                 status: 'rejected',
-                verificationDetails: {
-                  ...s.verificationDetails,
-                  rejectionReason: reason
-                } as any
-              } : s));
+                'verificationDetails.rejectionReason': reason
+              }).eq('id', id);
             }}
           />
         ) : activeTab === 'loyalty' ? (
@@ -1367,6 +1581,19 @@ export default function App() {
         isOpen={isLoginOpen}
         onClose={() => setIsLoginOpen(false)}
       />
+
+      {showRoleSelection && (
+        <RoleSelection 
+          onSelect={(role) => {
+            setShowRoleSelection(false);
+            if (role === 'sell') {
+              setActiveTab('partner');
+            } else {
+              setActiveTab('shop');
+            }
+          }}
+        />
+      )}
 
       {isCheckoutOpen && cartItems.length > 0 && user && (
         <CheckoutModal 

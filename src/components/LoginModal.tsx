@@ -4,9 +4,9 @@
  */
 
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Mail, Lock, LogIn, Chrome, Phone, User } from 'lucide-react';
+import { X, User, ArrowRight, AlertCircle } from 'lucide-react';
 import { useState, FormEvent } from 'react';
-import { signInWithGoogle, registerWithEmail, loginWithEmail } from '../lib/firebase';
+import { supabase, signInWithPhone, verifyOtp } from '../lib/supabase';
 import { cn } from '../lib/utils';
 
 interface LoginModalProps {
@@ -15,47 +15,62 @@ interface LoginModalProps {
 }
 
 export function LoginModal({ isOpen, onClose }: LoginModalProps) {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
+  const [name, setName] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [isRegistering, setIsRegistering] = useState(false);
-  const [authMethod, setAuthMethod] = useState<'email' | 'phone'>('email');
+  const [step, setStep] = useState<'phone' | 'otp' | 'name'>('phone');
+  const [otpCode, setOtpCode] = useState('');
+  const [demoCode, setDemoCode] = useState('');
+  const [error, setError] = useState<string | null>(null);
 
-  const handleGoogleLogin = async () => {
+  const handlePhoneSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!phone) return;
+    
     setIsLoading(true);
+    setError(null);
     try {
-      await signInWithGoogle();
-      onClose();
-    } catch (error) {
-      alert("Failed to login with Google. Ensure Firebase is correctly set up.");
+      await signInWithPhone(phone);
+      setStep('otp');
+      // For demo purposes, we'll still show a demo code if we want
+      // But real Supabase Otp would send an SMS
+      setDemoCode('1234');
+    } catch (e: any) {
+      setError(e.message || 'Failed to send OTP');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleEmailAuth = async (e: FormEvent) => {
+  const handleOtpVerify = async (e: FormEvent) => {
     e.preventDefault();
-    if (!email || !password || (isRegistering && !name)) {
-      alert("Please fill in all required fields.");
-      return;
-    }
+    if (!otpCode) return;
 
     setIsLoading(true);
+    setError(null);
     try {
-      if (isRegistering) {
-        await registerWithEmail(email, password, name);
+      const user = await verifyOtp(phone, otpCode);
+      
+      if (user) {
+        setStep('name');
       } else {
-        await loginWithEmail(email, password);
+        setError('Invalid OTP');
       }
-      onClose();
-    } catch (error: any) {
-      console.error("Auth error:", error);
-      alert(error.message || "An error occurred during authentication.");
+    } catch (e: any) {
+      setError(e.message || 'Verification failed.');
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleNameSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!name) return;
+    
+    window.dispatchEvent(new CustomEvent('mock-login', { 
+      detail: { phone, name } 
+    }));
+    onClose();
   };
 
   return (
@@ -70,155 +85,182 @@ export function LoginModal({ isOpen, onClose }: LoginModalProps) {
             className="fixed inset-0 bg-black/60 z-[100] backdrop-blur-sm"
           />
           <motion.div
-            initial={{ opacity: 0, scale: 0.9, y: 20 }}
+            initial={{ opacity: 0, scale: 0.9, y: "100%" }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.9, y: 20 }}
-            className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md bg-white z-[110] rounded-3xl shadow-2xl overflow-hidden"
+            exit={{ opacity: 0, scale: 0.9, y: "100%" }}
+            className="fixed bottom-0 sm:bottom-auto sm:left-1/2 sm:top-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 w-full max-w-md bg-white z-[110] rounded-t-[2.5rem] sm:rounded-[2.5rem] shadow-2xl overflow-hidden"
           >
             <div className="p-8 space-y-8">
               <div className="flex justify-between items-start">
                 <div className="space-y-1">
                   <h2 className="text-3xl font-black text-slate-800 tracking-tighter">NEPAL<span className="text-accent">MART</span></h2>
-                  <p className="text-sm font-medium text-slate-400">
-                    {isRegistering ? 'Create your account' : 'Login to your account'}
-                  </p>
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest leading-none">Fresh & Local Delivery</p>
                 </div>
                 <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
                   <X className="w-6 h-6 text-slate-400" />
                 </button>
               </div>
 
-              <form onSubmit={handleEmailAuth} className="space-y-4">
-                {isRegistering && (
-                  <>
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest px-1">Full Name</label>
-                      <div className="relative">
-                        <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                        <input 
-                          required
-                          type="text" 
-                          placeholder="John Doe"
-                          className="w-full bg-slate-50 border border-slate-100 rounded-xl py-3 pl-11 pr-4 text-sm focus:ring-2 focus:ring-primary outline-none transition-all"
-                          value={name}
-                          onChange={(e) => setName(e.target.value)}
-                        />
-                      </div>
+              <AnimatePresence mode="wait">
+                {step === 'phone' && (
+                  <motion.div
+                    key="phone"
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -20 }}
+                    className="space-y-6"
+                  >
+                    <div className="space-y-2">
+                      <h3 className="text-xl font-black text-slate-800">Phone Verification</h3>
+                      <p className="text-sm text-slate-500">We'll send you a verification code via SMS.</p>
                     </div>
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest px-1">Mobile Number</label>
+
+                    <form onSubmit={handlePhoneSubmit} className="space-y-4">
                       <div className="relative">
-                        <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                        <div className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center gap-2 pr-2 border-r border-slate-200">
+                          <span className="text-xs font-bold text-slate-500">+977</span>
+                        </div>
                         <input 
                           type="tel" 
                           placeholder="98XXXXXXXX"
-                          className="w-full bg-slate-50 border border-slate-100 rounded-xl py-3 pl-11 pr-4 text-sm focus:ring-2 focus:ring-primary outline-none transition-all"
+                          className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-5 pl-16 pr-4 text-sm font-bold focus:ring-2 focus:ring-primary outline-none transition-all placeholder:text-slate-300"
                           value={phone}
-                          onChange={(e) => setPhone(e.target.value)}
+                          onChange={e => setPhone(e.target.value)}
+                          required
+                          autoFocus
                         />
                       </div>
-                    </div>
-                  </>
+
+                      {error && (
+                        <div className="flex items-center gap-2 p-4 rounded-xl bg-red-50 text-red-600 text-[10px] font-black uppercase tracking-widest leading-none">
+                          <AlertCircle className="w-4 h-4" />
+                          {error}
+                        </div>
+                      )}
+
+                      <button 
+                        disabled={isLoading}
+                        className="group w-full bg-primary text-white py-5 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-red-600 transition-all shadow-lg shadow-primary/20"
+                      >
+                        {isLoading ? 'Connecting...' : 'Send OTP Code'}
+                        {!isLoading && <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />}
+                      </button>
+                    </form>
+                  </motion.div>
                 )}
-                
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest px-1">Email Address</label>
-                  <div className="relative">
-                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                    <input 
-                      required
-                      type="email" 
-                      placeholder="name@example.com"
-                      className="w-full bg-slate-50 border border-slate-100 rounded-xl py-3 pl-11 pr-4 text-sm focus:ring-2 focus:ring-primary outline-none transition-all"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                    />
-                  </div>
-                </div>
 
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest px-1">Password</label>
-                  <div className="relative">
-                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                    <input 
-                      required
-                      type="password" 
-                      placeholder="••••••••"
-                      className="w-full bg-slate-50 border border-slate-100 rounded-xl py-3 pl-11 pr-4 text-sm focus:ring-2 focus:ring-primary outline-none transition-all"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                    />
-                  </div>
-                </div>
-
-                <button 
-                  type="submit"
-                  disabled={isLoading}
-                  className={cn(
-                    "w-full bg-slate-900 text-white py-3.5 rounded-xl font-bold text-sm shadow-xl shadow-slate-900/10 active:scale-95 transition-all flex items-center justify-center gap-3",
-                    isLoading && "opacity-50 pointer-events-none"
-                  )}
-                >
-                  {isLoading ? (
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  ) : (
-                    <>
-                      <LogIn className="w-4 h-4" />
-                      {isRegistering ? 'Sign Up' : 'Continue with Email'}
-                    </>
-                  )}
-                </button>
-              </form>
-
-              <div className="text-center space-y-3">
-                <button 
-                  onClick={() => setIsRegistering(!isRegistering)}
-                  className="text-xs font-bold text-primary hover:underline block w-full"
-                >
-                  {isRegistering ? 'Already have an account? Login' : 'New to Nepal Mart? Create account'}
-                </button>
-                <div className="pt-1">
-                  <button 
-                    onClick={() => {
-                      window.dispatchEvent(new CustomEvent('mock-login'));
-                      onClose();
-                    }}
-                    className="text-[10px] font-black text-slate-400 border border-slate-100 px-4 py-2 rounded-lg hover:bg-slate-50 transition-all uppercase tracking-widest"
+                {step === 'otp' && (
+                  <motion.div
+                    key="otp"
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -20 }}
+                    className="space-y-6"
                   >
-                    Continue as Guest (Demo)
-                  </button>
-                </div>
+                    <div className="space-y-2">
+                      <h3 className="text-xl font-black text-slate-800">Enter OTP</h3>
+                      <p className="text-sm text-slate-500">Code sent to <span className="font-bold text-slate-800">+977 {phone}</span></p>
+                    </div>
+
+                    <form onSubmit={handleOtpVerify} className="space-y-4">
+                      <input 
+                        type="text" 
+                        placeholder="0 0 0 0"
+                        maxLength={4}
+                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-6 px-4 text-center text-3xl font-black tracking-[0.5em] focus:ring-2 focus:ring-primary outline-none transition-all"
+                        value={otpCode}
+                        onChange={e => setOtpCode(e.target.value)}
+                        required
+                        autoFocus
+                      />
+
+                      {demoCode && (
+                        <div className="p-4 bg-amber-50 rounded-2xl border border-amber-100 text-center">
+                          <p className="text-[10px] text-amber-700 font-extrabold uppercase tracking-widest">Demo Login Code: {demoCode}</p>
+                        </div>
+                      )}
+
+                      {error && (
+                        <div className="flex items-center gap-2 p-4 rounded-xl bg-red-50 text-red-600 text-[10px] font-black uppercase tracking-widest">
+                          <AlertCircle className="w-4 h-4" />
+                          {error}
+                        </div>
+                      )}
+
+                      <button 
+                        disabled={isLoading}
+                        className="w-full bg-primary text-white py-5 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-red-600 transition-all shadow-lg shadow-primary/20"
+                      >
+                        {isLoading ? 'Verifying...' : 'Verify & Continue'}
+                      </button>
+
+                      <button 
+                        type="button"
+                        onClick={() => setStep('phone')}
+                        className="w-full text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-primary transition-colors"
+                      >
+                        Change Number or Retry
+                      </button>
+                    </form>
+                  </motion.div>
+                )}
+
+                {step === 'name' && (
+                  <motion.div
+                    key="name"
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -20 }}
+                    className="space-y-6"
+                  >
+                    <div className="space-y-2">
+                      <h3 className="text-xl font-black text-slate-800">What's your name?</h3>
+                      <p className="text-sm text-slate-500">We'd love to know who we're delivering to!</p>
+                    </div>
+
+                    <form onSubmit={handleNameSubmit} className="space-y-4">
+                      <div className="relative">
+                        <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                        <input 
+                          type="text" 
+                          placeholder="Your Full Name"
+                          className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-5 pl-12 pr-4 text-sm font-bold focus:ring-2 focus:ring-primary outline-none transition-all"
+                          value={name}
+                          onChange={e => setName(e.target.value)}
+                          required
+                          autoFocus
+                        />
+                      </div>
+
+                      <button 
+                        className="w-full bg-slate-900 text-white py-5 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-black transition-all shadow-lg"
+                      >
+                        Start Shopping
+                        <ArrowRight className="w-4 h-4" />
+                      </button>
+                    </form>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              <div className="text-center">
+                 <button 
+                  onClick={() => {
+                    window.dispatchEvent(new CustomEvent('mock-login'));
+                    onClose();
+                  }}
+                  className="text-[10px] font-black text-slate-400 border border-slate-100 px-4 py-2 rounded-lg hover:bg-slate-50 transition-all uppercase tracking-widest"
+                >
+                  Continue as Guest (Demo)
+                </button>
               </div>
 
-              <div className="relative">
-                 <div className="absolute inset-0 flex items-center">
-                   <div className="w-full border-t border-slate-100"></div>
-                 </div>
-                 <div className="relative flex justify-center text-[10px] uppercase font-bold tracking-widest">
-                   <span className="bg-white px-4 text-slate-400">Or connect with</span>
-                 </div>
+              <div className="text-center pt-4">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-relaxed">
+                  By signing in, you agree to our <br/>
+                  <span className="text-slate-800 underline">Terms of Service</span> & <span className="text-slate-800 underline">Privacy Policy</span>
+                </p>
               </div>
-
-              <button 
-                onClick={handleGoogleLogin}
-                disabled={isLoading}
-                className={cn(
-                  "w-full bg-white border border-slate-200 text-slate-600 py-3.5 rounded-xl font-bold text-sm hover:bg-slate-50 active:scale-95 transition-all flex items-center justify-center gap-3",
-                  isLoading && "opacity-50 pointer-events-none"
-                )}
-              >
-                {isLoading ? (
-                  <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                ) : (
-                  <Chrome className="w-4 h-4" />
-                )}
-                Login with Google
-              </button>
-
-              <p className="text-[10px] text-center text-slate-400 leading-relaxed">
-                By continuing, you agree to Nepal Mart's <br/>
-                <span className="text-slate-800 font-bold underline cursor-pointer">Terms of Service</span> and <span className="text-slate-800 font-bold underline cursor-pointer">Privacy Policy</span>.
-              </p>
             </div>
           </motion.div>
         </>

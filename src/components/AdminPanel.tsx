@@ -28,7 +28,8 @@ import {
   XCircle as XCircleIcon,
   QrCode,
   Banknote,
-  Upload
+  Upload,
+  CreditCard
 } from 'lucide-react';
 import { SupportTicket, StoreProfile, Product, Order, SupportSettings, CommissionPayment, WithdrawalRequest, UserReport } from '../types';
 import { cn } from '../lib/utils';
@@ -370,26 +371,42 @@ export function AdminPanel({
                         </div>
                       </div>
                       <div className="flex items-center gap-3 text-slate-500">
+                        <ShieldCheck className="w-4 h-4 text-primary" />
+                        <div>
+                          <p className="text-[9px] font-black text-slate-400 uppercase">Citizenship Number</p>
+                          <p className="text-sm font-bold">{selectedStore.verificationDetails?.citizenshipNumber || "N/A"}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3 text-slate-500">
+                        <CreditCard className="w-4 h-4 text-primary" />
+                        <div>
+                          <p className="text-[9px] font-black text-slate-400 uppercase">PAN / VAT</p>
+                          <p className="text-sm font-bold">{selectedStore.verificationDetails?.panVatNumber || "N/A"}</p>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-3 text-slate-500">
                         <Phone className="w-4 h-4 text-primary" />
                         <div>
                           <p className="text-[9px] font-black text-slate-400 uppercase">Contact</p>
                           <p className="text-sm font-bold">{selectedStore.contactNumber}</p>
                         </div>
                       </div>
-                    </div>
-                    <div className="space-y-4">
+                      <div className="flex items-center gap-3 text-slate-500">
+                        <History className="w-4 h-4 text-primary" />
+                        <div>
+                          <p className="text-[9px] font-black text-slate-400 uppercase">Bank Payout Info</p>
+                          <p className="text-[10px] font-bold text-slate-600">
+                            {selectedStore.paymentSettings?.bankName} - {selectedStore.paymentSettings?.accountNumber}
+                          </p>
+                        </div>
+                      </div>
                       <div className="flex items-center gap-3 text-slate-500">
                         <MapPin className="w-4 h-4 text-primary" />
                         <div>
                           <p className="text-[9px] font-black text-slate-400 uppercase">Address</p>
-                          <p className="text-sm font-bold">{selectedStore.address}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-3 text-slate-500">
-                        <Clock className="w-4 h-4 text-primary" />
-                        <div>
-                          <p className="text-[9px] font-black text-slate-400 uppercase">Operating Hours</p>
-                          <p className="text-sm font-bold">{selectedStore.openingTime} - {selectedStore.closingTime}</p>
+                          <p className="text-sm font-bold truncate max-w-[200px]">{selectedStore.address}</p>
                         </div>
                       </div>
                     </div>
@@ -398,22 +415,22 @@ export function AdminPanel({
                   <div className="space-y-4">
                     <h4 className="text-xs font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
                       <FileText className="w-4 h-4 text-primary" />
-                      Uploaded Documents
+                      Verification Documents
                     </h4>
-                    <div className="grid grid-cols-3 gap-4">
+                    <div className="grid grid-cols-4 gap-4">
                       {Object.entries(selectedStore.verificationDetails?.documents || {}).map(([key, url]) => (
                         url ? (
                           <div key={key} className="space-y-2">
                              <div className="aspect-square bg-slate-50 rounded-xl overflow-hidden border border-slate-100 group relative">
                                <img src={url} className="w-full h-full object-cover transition-transform group-hover:scale-110" />
                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                 <button className="text-white p-2 bg-white/20 rounded-full backdrop-blur-sm">
+                                 <a href={url} target="_blank" rel="noreferrer" className="text-white p-2 bg-white/20 rounded-full backdrop-blur-sm">
                                    <Eye className="w-5 h-5" />
-                                 </button>
+                                 </a>
                                </div>
                              </div>
-                             <p className="text-[10px] font-black text-center text-slate-400 uppercase tracking-widest">
-                               {key === 'idCard' ? 'Citizenship' : key === 'shopFront' ? 'Shop Front' : 'License'}
+                             <p className="text-[8px] font-black text-center text-slate-400 uppercase tracking-widest truncate">
+                               {key === 'idCard' ? 'Citizenship' : key === 'shopFront' ? 'Shop Front' : key === 'license' ? 'License' : key === 'panCard' ? 'PAN Card' : key === 'qrCode' ? 'QR Code' : 'Logo'}
                              </p>
                           </div>
                         ) : null
@@ -838,6 +855,72 @@ export function AdminPanel({
                  )}
               </div>
            </div>
+        </div>
+      )}
+      {activeTab === 'payouts' && (
+        <div className="space-y-6">
+          <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
+             <div className="p-6 border-b border-slate-50 flex items-center justify-between">
+                <h3 className="font-black text-slate-800 uppercase tracking-tight">Manual Seller Payouts</h3>
+                <div className="flex items-center gap-2">
+                   <Banknote className="w-4 h-4 text-primary" />
+                   <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Pending settlement</span>
+                </div>
+             </div>
+             <div className="overflow-x-auto">
+                <table className="w-full text-left">
+                   <thead>
+                      <tr className="bg-slate-50/50 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                         <th className="px-6 py-4">Seller/Store</th>
+                         <th className="px-6 py-4">Total Earnings</th>
+                         <th className="px-6 py-4">Bank Details</th>
+                         <th className="px-6 py-4">IFSC / Routing</th>
+                         <th className="px-6 py-4 text-right">Actions</th>
+                      </tr>
+                   </thead>
+                   <tbody className="divide-y divide-slate-50">
+                      {storeReports.filter(s => s.earnings > 0).map(store => (
+                        <tr key={store.id} className="hover:bg-slate-50/30 transition-colors">
+                           <td className="px-6 py-4">
+                              <div className="flex items-center gap-3">
+                                 <div className="w-8 h-8 rounded-lg bg-slate-100 border border-slate-200 overflow-hidden">
+                                    <img src={store.logo} className="w-full h-full object-cover" />
+                                 </div>
+                                 <div>
+                                    <p className="text-sm font-black text-slate-800">{store.name}</p>
+                                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{store.ownerId}</p>
+                                 </div>
+                              </div>
+                           </td>
+                           <td className="px-6 py-4 font-black text-green-600 text-sm">Rs. {store.earnings.toLocaleString()}</td>
+                           <td className="px-6 py-4">
+                              <div className="space-y-0.5">
+                                 <p className="text-[10px] font-black text-slate-800 uppercase tracking-tight">{store.paymentSettings?.bankName}</p>
+                                 <p className="text-[10px] font-bold text-slate-400 uppercase">{store.paymentSettings?.accountNumber}</p>
+                                 <p className="text-[9px] font-medium text-slate-400">{store.paymentSettings?.accountHolder}</p>
+                              </div>
+                           </td>
+                           <td className="px-6 py-4">
+                              <span className="text-[10px] font-black text-slate-500 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                                 {store.paymentSettings?.ifscCode || 'N/A'}
+                              </span>
+                           </td>
+                           <td className="px-6 py-4 text-right">
+                              <button 
+                                onClick={() => {
+                                  alert(`Transfer Rs. ${store.earnings.toLocaleString()} to ${store.name} bank account.\n\nBank: ${store.paymentSettings?.bankName}\nA/C: ${store.paymentSettings?.accountNumber}\nIFSC: ${store.paymentSettings?.ifscCode}\n\nThis is a manual process. Mask as paid once done.`);
+                                }}
+                                className="bg-primary text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-md hover:scale-105 transition-all"
+                              >
+                                Pay Now
+                              </button>
+                           </td>
+                        </tr>
+                      ))}
+                   </tbody>
+                </table>
+             </div>
+          </div>
         </div>
       )}
       {activeTab === 'settings' && (

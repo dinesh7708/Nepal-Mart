@@ -12,6 +12,7 @@ import {
   onAuthStateChanged, 
   createUserWithEmailAndPassword, 
   signInWithEmailAndPassword,
+  signInAnonymously,
   updateProfile
 } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
@@ -41,7 +42,7 @@ export const loginWithEmail = async (email: string, pass: string) => {
   return userCredential.user;
 };
 
-export { onAuthStateChanged };
+export { onAuthStateChanged, signInAnonymously };
 
 export const signInWithGoogle = async () => {
   if (!auth) throw new Error("Auth not initialized. Check Firebase configuration.");

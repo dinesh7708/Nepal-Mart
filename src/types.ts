@@ -43,10 +43,15 @@ export interface Store {
 export interface VerificationDetails {
   ownerFullName: string;
   mobileVerified: boolean;
+  citizenshipNumber: string;
+  panVatNumber?: string;
   documents: {
     shopFront: string;
     idCard: string;
     license?: string;
+    panCard?: string;
+    storeLogo?: string;
+    qrCode?: string;
   };
   rejectionReason?: string;
   submittedAt?: number;
@@ -64,6 +69,8 @@ export interface PaymentSettings {
   bankName?: string;
   accountHolder?: string;
   accountNumber?: string;
+  ifscCode?: string;
+  mobileNumber?: string;
   instructions?: string;
 }
 
@@ -107,7 +114,7 @@ export interface UserProfile {
   referralCode: string;
   referredBy?: string;
   isPartner?: boolean;
-  storeId?: string;
+  storeId?: string | null;
 }
 
 export interface MembershipTier {
@@ -129,6 +136,7 @@ export interface Order {
   userId: string;
   customerId: string;
   storeId: string;
+  storeOwnerId?: string;
   items: CartItem[];
   totalPrice: number;
   totalAmount: number;

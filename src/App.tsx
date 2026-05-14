@@ -555,7 +555,7 @@ export default function App() {
       createdAt: Date.now(),
       deliveryAddress: address,
       paymentMethod: paymentDetails.method,
-      paymentStatus: paymentDetails.status || (paymentDetails.method === 'cod' ? 'pending' : (paymentDetails.method === 'esewa' ? 'pending' : 'awaiting_verification')),
+      paymentStatus: paymentDetails.status || 'pending',
       transactionId: paymentDetails.transactionId,
       paymentScreenshot: paymentDetails.screenshot
     };
@@ -620,7 +620,6 @@ export default function App() {
       },
       paymentSettings: {
         codEnabled: true,
-        esewaEnabled: false,
         khaltiEnabled: false,
         qrEnabled: !!data.documents.qrCode,
         qrImage: data.documents.qrCode,

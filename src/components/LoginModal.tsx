@@ -20,7 +20,6 @@ export function LoginModal({ isOpen, onClose }: LoginModalProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [step, setStep] = useState<'phone' | 'otp' | 'name'>('phone');
   const [otpCode, setOtpCode] = useState('');
-  const [demoCode, setDemoCode] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   const handlePhoneSubmit = async (e: FormEvent) => {
@@ -30,11 +29,20 @@ export function LoginModal({ isOpen, onClose }: LoginModalProps) {
     setIsLoading(true);
     setError(null);
     try {
-      await signInWithPhone(phone);
-      setStep('otp');
-      // For demo purposes, we'll still show a demo code if we want
-      // But real Supabase Otp would send an SMS
-      setDemoCode('1234');
+      // Use Custom Twilio OTP API
+      const response = await fetch('/api/send-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone })
+      });
+      const data = await response.json();
+      
+      if (data.success) {
+        setStep('otp');
+      } else {
+        const fullError = data.details ? `${data.error} ${data.details}` : (data.error || 'Failed to send OTP');
+        throw new Error(fullError);
+      }
     } catch (e: any) {
       setError(e.message || 'Failed to send OTP');
     } finally {
@@ -49,12 +57,24 @@ export function LoginModal({ isOpen, onClose }: LoginModalProps) {
     setIsLoading(true);
     setError(null);
     try {
-      const user = await verifyOtp(phone, otpCode);
+      // Use Custom Twilio OTP API
+      const response = await fetch('/api/verify-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: phone, code: otpCode })
+      });
+      const data = await response.json();
       
-      if (user) {
-        setStep('name');
+      if (data.success) {
+        // If server returned a Firebase custom token, sign in with it (if we were using Firebase)
+        // For this app which is mixed, we'll dispatch a mock login event if it was successful
+        window.dispatchEvent(new CustomEvent('mock-login', { 
+          detail: { phone, name: 'User' } 
+        }));
+        onClose();
       } else {
-        setError('Invalid OTP');
+        const fullError = data.details ? `${data.error} ${data.details}` : (data.error || 'Invalid OTP');
+        throw new Error(fullError);
       }
     } catch (e: any) {
       setError(e.message || 'Verification failed.');
@@ -118,12 +138,12 @@ export function LoginModal({ isOpen, onClose }: LoginModalProps) {
                     <form onSubmit={handlePhoneSubmit} className="space-y-4">
                       <div className="relative">
                         <div className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center gap-2 pr-2 border-r border-slate-200">
-                          <span className="text-xs font-bold text-slate-500">+977</span>
+                          <span className="text-xs font-bold text-slate-500">Phone</span>
                         </div>
                         <input 
                           type="tel" 
-                          placeholder="98XXXXXXXX"
-                          className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-5 pl-16 pr-4 text-sm font-bold focus:ring-2 focus:ring-primary outline-none transition-all placeholder:text-slate-300"
+                          placeholder="+977 98XXXXXXXX"
+                          className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-5 pl-20 pr-4 text-sm font-bold focus:ring-2 focus:ring-primary outline-none transition-all placeholder:text-slate-300"
                           value={phone}
                           onChange={e => setPhone(e.target.value)}
                           required
@@ -165,20 +185,14 @@ export function LoginModal({ isOpen, onClose }: LoginModalProps) {
                     <form onSubmit={handleOtpVerify} className="space-y-4">
                       <input 
                         type="text" 
-                        placeholder="0 0 0 0"
-                        maxLength={4}
-                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-6 px-4 text-center text-3xl font-black tracking-[0.5em] focus:ring-2 focus:ring-primary outline-none transition-all"
+                        placeholder="0 0 0 0 0 0"
+                        maxLength={6}
+                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-6 px-4 text-center text-3xl font-black tracking-[0.2em] focus:ring-2 focus:ring-primary outline-none transition-all"
                         value={otpCode}
                         onChange={e => setOtpCode(e.target.value)}
                         required
                         autoFocus
                       />
-
-                      {demoCode && (
-                        <div className="p-4 bg-amber-50 rounded-2xl border border-amber-100 text-center">
-                          <p className="text-[10px] text-amber-700 font-extrabold uppercase tracking-widest">Demo Login Code: {demoCode}</p>
-                        </div>
-                      )}
 
                       {error && (
                         <div className="flex items-center gap-2 p-4 rounded-xl bg-red-50 text-red-600 text-[10px] font-black uppercase tracking-widest">
@@ -242,18 +256,6 @@ export function LoginModal({ isOpen, onClose }: LoginModalProps) {
                   </motion.div>
                 )}
               </AnimatePresence>
-
-              <div className="text-center">
-                 <button 
-                  onClick={() => {
-                    window.dispatchEvent(new CustomEvent('mock-login'));
-                    onClose();
-                  }}
-                  className="text-[10px] font-black text-slate-400 border border-slate-100 px-4 py-2 rounded-lg hover:bg-slate-50 transition-all uppercase tracking-widest"
-                >
-                  Continue as Guest (Demo)
-                </button>
-              </div>
 
               <div className="text-center pt-4">
                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-relaxed">

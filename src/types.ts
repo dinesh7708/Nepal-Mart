@@ -61,8 +61,6 @@ export interface PaymentSettings {
   codEnabled: boolean;
   qrEnabled: boolean;
   qrImage?: string;
-  esewaEnabled: boolean;
-  esewaId?: string;
   khaltiEnabled: boolean;
   khaltiId?: string;
   bankEnabled: boolean;
@@ -147,7 +145,7 @@ export interface Order {
   storeEarnings?: number;
   status: 'pending' | 'preparing' | 'on-the-way' | 'delivered' | 'cancelled' | 'accepted' | 'rejected' | 'processing' | 'shipped';
   paymentStatus: 'pending' | 'paid' | 'verified' | 'failed' | 'refunded' | 'awaiting_verification';
-  paymentMethod: 'cod' | 'qr' | 'esewa' | 'khalti' | 'bank';
+  paymentMethod: 'cod';
   transactionId?: string;
   paymentScreenshot?: string;
   createdAt: number;
@@ -178,7 +176,7 @@ export interface AdminStats {
 export interface WithdrawalRequest {
   id: string;
   amount: number;
-  method: 'bank' | 'esewa' | 'khalti' | 'qr';
+  method: 'bank' | 'qr';
   details: string; // Account info
   status: 'pending' | 'completed' | 'rejected';
   createdAt: number;

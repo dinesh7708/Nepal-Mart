@@ -96,7 +96,6 @@ export function AdminPanel({
   });
 
   const [withdrawalForm, setWithdrawalForm] = useState<any>(adminWithdrawalSettings || {
-    esewaId: '',
     khaltiId: '',
     bankDetails: '',
     qrImage: ''
@@ -647,11 +646,7 @@ export function AdminPanel({
                     <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Withdrawal Setup</p>
                     <QrCode className="w-5 h-5 text-slate-400" />
                  </div>
-                 <div className="grid grid-cols-2 gap-4">
-                    <div className="p-4 bg-slate-50 rounded-xl space-y-1">
-                       <p className="text-[8px] font-black text-slate-400 uppercase">eSewa ID</p>
-                       <p className="text-sm font-black truncate">{withdrawalForm.esewaId || 'Not Set'}</p>
-                    </div>
+                 <div className="grid grid-cols-1 gap-4">
                     <div className="p-4 bg-slate-50 rounded-xl space-y-1">
                        <p className="text-[8px] font-black text-slate-400 uppercase">Khalti ID</p>
                        <p className="text-sm font-black truncate">{withdrawalForm.khaltiId || 'Not Set'}</p>
@@ -1036,7 +1031,7 @@ export function AdminPanel({
                        </button>
                        <button className="p-4 rounded-2xl border flex flex-col items-center gap-2 text-slate-400">
                           <QrCode className="w-6 h-6" />
-                          <span className="text-[10px] font-black uppercase">eSewa/QR</span>
+                          <span className="text-[10px] font-black uppercase">Khalti/QR</span>
                        </button>
                     </div>
                  </div>

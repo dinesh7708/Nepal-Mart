@@ -105,7 +105,8 @@ export function PartnerOnboarding({ onComplete }: PartnerOnboardingProps) {
       if (data.success) {
         setOtpSent(true);
       } else {
-        alert(data.error || 'Failed to send OTP. Ensure Twilio keys are set in the environment.');
+        const fullError = data.details ? `${data.error}\n\n${data.details}` : (data.error || 'Failed to send OTP');
+        alert(fullError);
       }
     } catch (e) {
       console.error("OTP Send error:", e);
@@ -184,19 +185,10 @@ export function PartnerOnboarding({ onComplete }: PartnerOnboardingProps) {
           documents: formData.documents,
           submittedAt: Date.now()
         },
-        paymentSettings: {
-          codEnabled: true,
-          qrEnabled: !!formData.documents.qrCode,
-          qrImage: formData.documents.qrCode,
-          esewaEnabled: false,
-          khaltiEnabled: false,
-          bankEnabled: true,
-          bankName: formData.bankDetails.bankName,
-          accountHolder: formData.bankDetails.accountHolder,
-          accountNumber: formData.bankDetails.accountNumber,
-          ifscCode: formData.bankDetails.ifscCode,
-          mobileNumber: formData.bankDetails.mobileNumber
-        }
+          paymentSettings: {
+            codEnabled: true,
+            instructions: '',
+          }
       });
     }
   };
@@ -302,7 +294,7 @@ export function PartnerOnboarding({ onComplete }: PartnerOnboardingProps) {
                     <input 
                       required
                       type="tel" 
-                      placeholder="98XXXXXXXX"
+                      placeholder="+977 98XXXXXXXX"
                       className="w-full bg-slate-50 border border-slate-100 rounded-xl py-4 pl-11 pr-4 text-sm focus:ring-2 focus:ring-primary outline-none transition-all"
                       value={formData.phone}
                       onChange={e => setFormData({...formData, phone: e.target.value})}

@@ -15,8 +15,29 @@ try {
   console.error("Firebase Admin Init Error:", e);
 }
 
-// In-memory OTP storage
-const otpStore = new Map<string, { code: string; expires: number }>();
+// Helper: Normalize Phone to E.164 (Strict)
+const normalizePhone = (phone: string) => {
+  // Remove all non-numeric characters
+  let cleaned = phone.replace(/\D/g, "");
+  
+  // Handle 00 prefix (common alternate for +)
+  if (cleaned.startsWith("00")) {
+    cleaned = cleaned.substring(2);
+  }
+
+  // If it's a standard Nepal 10-digit number starting with 9
+  if (cleaned.length === 10 && cleaned.startsWith("9")) {
+    return `+977${cleaned}`;
+  }
+  
+  // If it already has 977 but no plus (common in Nepal)
+  if (cleaned.length === 13 && cleaned.startsWith("977")) {
+    return `+${cleaned}`;
+  }
+
+  // Otherwise, ensure it has a plus and no leading zeros
+  return `+${cleaned.replace(/^0+/, "")}`;
+};
 
 async function startServer() {
   const app = express();
@@ -25,8 +46,8 @@ async function startServer() {
 
   // Twilio Client
   const getTwilioClient = () => {
-    const sid = process.env.TWILIO_ACCOUNT_SID;
-    const token = process.env.TWILIO_AUTH_TOKEN;
+    const sid = process.env.TWILIO_ACCOUNT_SID?.trim().replace(/^["']|["']$/g, "");
+    const token = process.env.TWILIO_AUTH_TOKEN?.trim().replace(/^["']|["']$/g, "");
     if (!sid || !token) {
       throw new Error("TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN are required. Set these in the Settings menu.");
     }
@@ -37,93 +58,104 @@ async function startServer() {
     res.json({ status: "ok" });
   });
 
-  // eSewa: Generate Signature (v2)
-  app.post("/api/esewa/generate-signature", (req, res) => {
-    const { amount, transaction_uuid, product_code } = req.body;
-    const secretKey = process.env.ESEWA_SECRET_KEY || "8g8t8h8m6qnd9p"; // Default to test key if missing
-
-    try {
-      // eSewa v2 signature string format: total_amount,transaction_uuid,product_code
-      const signatureString = `total_amount=${amount},transaction_uuid=${transaction_uuid},product_code=${product_code}`;
-      const hmac = crypto.createHmac("sha256", secretKey);
-      hmac.update(signatureString);
-      const signature = hmac.digest("base64");
-
-      res.json({ signature });
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
   // API Route: Send OTP
   app.post("/api/send-otp", async (req, res) => {
-    const { phone } = req.body;
-    if (!phone) return res.status(400).json({ error: "Phone number required" });
+    const { phone: rawPhone } = req.body;
+    if (!rawPhone) return res.status(400).json({ error: "Phone number required" });
+    const phone = normalizePhone(rawPhone);
 
     try {
-      const code = Math.floor(1000 + Math.random() * 9000).toString();
-      const expires = Date.now() + 5 * 60 * 1000; // 5 mins
-      otpStore.set(phone, { code, expires });
+      const sid = process.env.TWILIO_ACCOUNT_SID?.trim().replace(/^["']|["']$/g, "");
+      const token = process.env.TWILIO_AUTH_TOKEN?.trim().replace(/^["']|["']$/g, "");
+      const verifySid = process.env.TWILIO_VERIFY_SERVICE_SID?.trim().replace(/^["']|["']$/g, "");
 
-      const sid = process.env.TWILIO_ACCOUNT_SID;
-      const token = process.env.TWILIO_AUTH_TOKEN;
-      const from = process.env.TWILIO_PHONE_NUMBER;
-
-      if (!sid || !token || !from) {
-        console.log(`[DEMO MODE] Skip Twilio: Missing keys. Manual OTP: ${code}`);
-        return res.json({ 
-          success: true, 
-          isDemo: true, 
-          message: `[DEMO MODE] Use code: ${code}`,
-          demoCode: code 
+      if (!sid || !token || !verifySid) {
+        console.log("[Twilio Config] Missing values:", { 
+          hasSid: !!sid, 
+          hasToken: !!token, 
+          hasVerifySid: !!verifySid,
+          verifySidPrefix: verifySid ? verifySid.slice(0, 2) : 'none'
+        });
+        return res.status(400).json({ 
+          error: "Twilio SMS Verification is incomplete. Please ensure TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_VERIFY_SERVICE_SID are correctly set in the Secrets menu.",
+          details: "Production OTP mode is enabled. Ensure your Verify Service SID is correct."
         });
       }
 
+      console.log(`[Twilio] Attempting to send Verify OTP to: "${phone}" using Service SID: "${verifySid}"`);
       const client = twilio(sid, token);
-      await client.messages.create({
-        body: `Your Nepal Mart verification code is: ${code}. It expires in 5 minutes.`,
-        from: from,
-        to: phone,
-      });
+      
+      const verification = await client.verify.v2.services(verifySid)
+        .verifications
+        .create({ to: phone, channel: 'sms' });
 
-      console.log(`OTP sent to ${phone}: ${code}`);
+      console.log(`[Twilio] Verify OTP request successful. SID: ${verification.sid}`);
       res.json({ success: true, message: "OTP sent successfully" });
     } catch (error: any) {
-      console.error("SMS Request Error:", error.message);
-      res.status(500).json({ error: error.message });
+      console.error("Twilio Verify Send Error:", {
+        message: error.message,
+        code: error.code,
+        status: error.status,
+        moreInfo: error.moreInfo,
+        phone: phone,
+        serviceSid: process.env.TWILIO_VERIFY_SERVICE_SID?.trim().slice(0, 5) + "..."
+      });
+
+      let errorMessage = error.message;
+      let details = error.code ? `Twilio Error Code: ${error.code}` : undefined;
+
+      // Handle Trial Account restriction
+      if (error.code === 21608) {
+        errorMessage = "Twilio Trial Account Restriction: The destination number is not verified.";
+        details = "In Twilio Trial mode, you can only send SMS to numbers you have verified in the Twilio Console under 'Verified Caller IDs'. To send to any number, upgrade your Twilio account.";
+      }
+
+      res.status(error.status || 500).json({ 
+        error: errorMessage,
+        details: details
+      });
     }
   });
 
   // API Route: Verify OTP and Login
   app.post("/api/verify-otp", async (req, res) => {
-    const { phone, code } = req.body;
-    const stored = otpStore.get(phone);
+    const { phone: rawPhone, code } = req.body;
+    if (!rawPhone || !code) return res.status(400).json({ error: "Phone and code required" });
+    const phone = normalizePhone(rawPhone);
+    
+    try {
+      const sid = process.env.TWILIO_ACCOUNT_SID?.trim().replace(/^["']|["']$/g, "");
+      const token = process.env.TWILIO_AUTH_TOKEN?.trim().replace(/^["']|["']$/g, "");
+      const verifySid = process.env.TWILIO_VERIFY_SERVICE_SID?.trim().replace(/^["']|["']$/g, "");
 
-    if (!stored) return res.status(400).json({ error: "OTP not requested or expired" });
-    if (Date.now() > stored.expires) {
-      otpStore.delete(phone);
-      return res.status(400).json({ error: "OTP expired" });
-    }
+      if (!sid || !token || !verifySid) {
+        return res.status(400).json({ error: "Twilio Verification Service is not fully configured." });
+      }
 
-    if (stored.code === code) {
-      otpStore.delete(phone);
+      // Real Twilio Verify
+      console.log(`[Twilio] Verifying code for ${phone} using Service: ${verifySid}`);
+      const client = twilio(sid, token);
+      const verification = await client.verify.v2.services(verifySid)
+        .verificationChecks
+        .create({ to: phone, code: code });
       
+      console.log(`[Twilio] Verification status: ${verification.status}`);
+      if (verification.status !== 'approved') {
+        return res.status(400).json({ error: "Invalid OTP code or expired session" });
+      }
+      
+      // If we got here, verification passed
+      const uid = `phone-${phone.replace(/\D/g, "")}`;
       try {
-        const uid = `phone-${phone.replace(/\D/g, "")}`;
-        // Only try to sign if we likely have permissions (not in a restricted dev env)
-        // Custom token generation requires iam.serviceAccounts.signBlob permission
         const customToken = await admin.auth().createCustomToken(uid);
         res.json({ success: true, token: customToken });
       } catch (e: any) {
-        if (e.code === 'auth/insufficient-permission' || e.message?.includes('perm')) {
-          console.log("[DEMO MODE] Skip Custom Token: IAM permission missing. Use mock login.");
-          return res.json({ success: true, mockLogin: true, uid: `phone-${phone}` });
-        }
-        console.log("[DEMO MODE] Custom Token Error (skipping):", e.message);
+        console.log("[VERIFY] Custom Token Fallback:", e.message);
         res.json({ success: true, mockLogin: true, uid: `phone-${phone}` });
       }
-    } else {
-      res.status(400).json({ error: "Invalid OTP code" });
+    } catch (error: any) {
+      console.error("Twilio Verify Check Error:", error.message);
+      res.status(error.status || 500).json({ error: error.message });
     }
   });
 

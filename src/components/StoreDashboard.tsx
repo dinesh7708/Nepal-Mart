@@ -724,54 +724,6 @@ export function StoreDashboard({
                           </button>
                         </div>
                       </div>
-
-                      {/* eSewa */}
-                      <div className="p-6 rounded-2xl border border-slate-100 bg-slate-50 opacity-60 space-y-4">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 bg-green-50 text-green-600 rounded-xl flex items-center justify-center font-black text-[10px]">eS</div>
-                            <span className="text-sm font-black text-slate-800 uppercase tracking-tight">eSewa Wallet</span>
-                          </div>
-                          <div className="text-[8px] font-black uppercase text-amber-500 bg-amber-50 px-2 py-1 rounded">Maintenance</div>
-                        </div>
-                      </div>
-
-                      {/* Khalti */}
-                      <div className="p-6 rounded-2xl border border-slate-100 bg-slate-50 opacity-60 space-y-4">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 bg-purple-50 text-purple-600 rounded-xl flex items-center justify-center font-black text-[10px]">Kh</div>
-                            <span className="text-sm font-black text-slate-800 uppercase tracking-tight">Khalti Wallet</span>
-                          </div>
-                          <div className="text-[8px] font-black uppercase text-amber-500 bg-amber-50 px-2 py-1 rounded">Maintenance</div>
-                        </div>
-                      </div>
-
-                      {/* Bank */}
-                      <div className="p-6 rounded-2xl border border-slate-100 bg-slate-50 opacity-60 space-y-4">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center">
-                              <Wallet className="w-5 h-5" />
-                            </div>
-                            <span className="text-sm font-black text-slate-800 uppercase tracking-tight">Bank Transfer</span>
-                          </div>
-                          <div className="text-[8px] font-black uppercase text-amber-500 bg-amber-50 px-2 py-1 rounded">Maintenance</div>
-                        </div>
-                      </div>
-
-                      {/* QR */}
-                      <div className="p-6 rounded-2xl border border-slate-100 bg-slate-50 opacity-60 space-y-4 col-span-1 md:col-span-2">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 bg-slate-900 text-white rounded-xl flex items-center justify-center">
-                              <QrCode className="w-5 h-5" />
-                            </div>
-                            <span className="text-sm font-black text-slate-800 uppercase tracking-tight">QR Code Payment</span>
-                          </div>
-                          <div className="text-[8px] font-black uppercase text-amber-500 bg-amber-50 px-2 py-1 rounded">Maintenance</div>
-                        </div>
-                      </div>
                     </div>
                     <button 
                       type="submit"
@@ -888,12 +840,8 @@ export function StoreDashboard({
                   </div>
                   <div className="border-t border-slate-200 pt-4 space-y-3">
                      <p className="text-[10px] font-black text-primary uppercase tracking-widest">Platform Payment Details:</p>
-                     <div className="grid grid-cols-2 gap-4">
-                        <div className="bg-white p-3 rounded-lg border border-slate-100">
-                           <p className="text-[8px] font-black uppercase text-slate-400">eSewa ID</p>
-                           <p className="text-[10px] font-bold text-slate-800">9801234567</p>
-                        </div>
-                        <div className="bg-white p-3 rounded-lg border border-slate-100">
+                     <div className="grid grid-cols-1 gap-4">
+                        <div className="bg-white p-3 rounded-lg border border-slate-100 text-center">
                            <p className="text-[8px] font-black uppercase text-slate-400">Khalti ID</p>
                            <p className="text-[10px] font-bold text-slate-800">9801234567</p>
                         </div>

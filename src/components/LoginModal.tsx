@@ -4,10 +4,9 @@
  */
 
 import { motion, AnimatePresence } from 'motion/react';
-import { X, User, ArrowRight, AlertCircle } from 'lucide-react';
+import { X, User, ArrowRight, AlertCircle, Mail } from 'lucide-react';
 import { useState, FormEvent } from 'react';
-import { supabase, signInWithPhone, verifyOtp } from '../lib/supabase';
-import { cn } from '../lib/utils';
+import { supabase, sendEmailOtp, verifyEmailOtp } from '../lib/supabase';
 
 interface LoginModalProps {
   isOpen: boolean;
@@ -15,36 +14,24 @@ interface LoginModalProps {
 }
 
 export function LoginModal({ isOpen, onClose }: LoginModalProps) {
-  const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
   const [name, setName] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [step, setStep] = useState<'phone' | 'otp' | 'name'>('phone');
+  const [step, setStep] = useState<'email' | 'otp' | 'name'>('email');
   const [otpCode, setOtpCode] = useState('');
   const [error, setError] = useState<string | null>(null);
 
-  const handlePhoneSubmit = async (e: FormEvent) => {
+  const handleEmailSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!phone) return;
+    if (!email) return;
     
     setIsLoading(true);
     setError(null);
     try {
-      // Use Custom Twilio OTP API
-      const response = await fetch('/api/send-otp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone })
-      });
-      const data = await response.json();
-      
-      if (data.success) {
-        setStep('otp');
-      } else {
-        const fullError = data.details ? `${data.error} ${data.details}` : (data.error || 'Failed to send OTP');
-        throw new Error(fullError);
-      }
+      await sendEmailOtp(email);
+      setStep('otp');
     } catch (e: any) {
-      setError(e.message || 'Failed to send OTP');
+      setError(e.message || 'Failed to send OTP to your email.');
     } finally {
       setIsLoading(false);
     }
@@ -57,27 +44,19 @@ export function LoginModal({ isOpen, onClose }: LoginModalProps) {
     setIsLoading(true);
     setError(null);
     try {
-      // Use Custom Twilio OTP API
-      const response = await fetch('/api/verify-otp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: phone, code: otpCode })
-      });
-      const data = await response.json();
-      
-      if (data.success) {
-        // If server returned a Firebase custom token, sign in with it (if we were using Firebase)
-        // For this app which is mixed, we'll dispatch a mock login event if it was successful
-        window.dispatchEvent(new CustomEvent('mock-login', { 
-          detail: { phone, name: 'User' } 
-        }));
-        onClose();
-      } else {
-        const fullError = data.details ? `${data.error} ${data.details}` : (data.error || 'Invalid OTP');
-        throw new Error(fullError);
+      const user = await verifyEmailOtp(email, otpCode);
+      if (user) {
+        // We'll trust the App.tsx's onAuthStateChange to handle the actual login state
+        // but we might need to set the name if it's a new user.
+        // Actually, let's check if the user has a name in metadata.
+        if (user.user_metadata?.full_name) {
+          onClose();
+        } else {
+          setStep('name');
+        }
       }
     } catch (e: any) {
-      setError(e.message || 'Verification failed.');
+      setError(e.message || 'Verification failed. Please check the code.');
     } finally {
       setIsLoading(false);
     }
@@ -87,10 +66,25 @@ export function LoginModal({ isOpen, onClose }: LoginModalProps) {
     e.preventDefault();
     if (!name) return;
     
-    window.dispatchEvent(new CustomEvent('mock-login', { 
-      detail: { phone, name } 
-    }));
-    onClose();
+    setIsLoading(true);
+    try {
+      const { error } = await supabase.auth.updateUser({
+        data: { full_name: name }
+      });
+      if (error) throw error;
+      
+      // Update our custom users table too
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        await supabase.from('users').update({ name }).eq('id', user.id);
+      }
+      
+      onClose();
+    } catch (e: any) {
+      setError(e.message || 'Failed to update your name.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -122,47 +116,45 @@ export function LoginModal({ isOpen, onClose }: LoginModalProps) {
               </div>
 
               <AnimatePresence mode="wait">
-                {step === 'phone' && (
+                {step === 'email' && (
                   <motion.div
-                    key="phone"
+                    key="email"
                     initial={{ opacity: 0, x: 20 }}
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: -20 }}
                     className="space-y-6"
                   >
                     <div className="space-y-2">
-                      <h3 className="text-xl font-black text-slate-800">Phone Verification</h3>
-                      <p className="text-sm text-slate-500">We'll send you a verification code via SMS.</p>
+                      <h3 className="text-xl font-black text-slate-800">Email Login</h3>
+                      <p className="text-sm text-slate-500">Enter your email and we'll send a 6-digit code.</p>
                     </div>
 
-                    <form onSubmit={handlePhoneSubmit} className="space-y-4">
+                    <form onSubmit={handleEmailSubmit} className="space-y-4">
                       <div className="relative">
-                        <div className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center gap-2 pr-2 border-r border-slate-200">
-                          <span className="text-xs font-bold text-slate-500">Phone</span>
-                        </div>
+                        <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
                         <input 
-                          type="tel" 
-                          placeholder="+977 98XXXXXXXX"
-                          className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-5 pl-20 pr-4 text-sm font-bold focus:ring-2 focus:ring-primary outline-none transition-all placeholder:text-slate-300"
-                          value={phone}
-                          onChange={e => setPhone(e.target.value)}
+                          type="email" 
+                          placeholder="your@email.com"
+                          className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-5 pl-12 pr-4 text-sm font-bold focus:ring-2 focus:ring-primary outline-none transition-all placeholder:text-slate-300"
+                          value={email}
+                          onChange={e => setEmail(e.target.value)}
                           required
                           autoFocus
                         />
                       </div>
 
                       {error && (
-                        <div className="flex items-center gap-2 p-4 rounded-xl bg-red-50 text-red-600 text-[10px] font-black uppercase tracking-widest leading-none">
-                          <AlertCircle className="w-4 h-4" />
+                        <div className="flex items-center gap-2 p-4 rounded-xl bg-red-50 text-red-600 text-xs font-bold leading-relaxed">
+                          <AlertCircle className="w-4 h-4 shrink-0" />
                           {error}
                         </div>
                       )}
 
                       <button 
                         disabled={isLoading}
-                        className="group w-full bg-primary text-white py-5 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-red-600 transition-all shadow-lg shadow-primary/20"
+                        className="group w-full bg-primary text-white py-5 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-slate-900 transition-all shadow-lg shadow-primary/20"
                       >
-                        {isLoading ? 'Connecting...' : 'Send OTP Code'}
+                        {isLoading ? 'Connecting...' : 'Send Login Code'}
                         {!isLoading && <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />}
                       </button>
                     </form>
@@ -178,8 +170,8 @@ export function LoginModal({ isOpen, onClose }: LoginModalProps) {
                     className="space-y-6"
                   >
                     <div className="space-y-2">
-                      <h3 className="text-xl font-black text-slate-800">Enter OTP</h3>
-                      <p className="text-sm text-slate-500">Code sent to <span className="font-bold text-slate-800">+977 {phone}</span></p>
+                      <h3 className="text-xl font-black text-slate-800">Enter Code</h3>
+                      <p className="text-sm text-slate-500">Check your inbox at <span className="font-bold text-slate-800">{email}</span></p>
                     </div>
 
                     <form onSubmit={handleOtpVerify} className="space-y-4">
@@ -195,25 +187,25 @@ export function LoginModal({ isOpen, onClose }: LoginModalProps) {
                       />
 
                       {error && (
-                        <div className="flex items-center gap-2 p-4 rounded-xl bg-red-50 text-red-600 text-[10px] font-black uppercase tracking-widest">
-                          <AlertCircle className="w-4 h-4" />
+                        <div className="flex items-center gap-2 p-4 rounded-xl bg-red-50 text-red-600 text-xs font-bold leading-relaxed">
+                          <AlertCircle className="w-4 h-4 shrink-0" />
                           {error}
                         </div>
                       )}
 
                       <button 
                         disabled={isLoading}
-                        className="w-full bg-primary text-white py-5 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-red-600 transition-all shadow-lg shadow-primary/20"
+                        className="w-full bg-primary text-white py-5 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-slate-900 transition-all shadow-lg shadow-primary/20"
                       >
                         {isLoading ? 'Verifying...' : 'Verify & Continue'}
                       </button>
 
                       <button 
                         type="button"
-                        onClick={() => setStep('phone')}
+                        onClick={() => setStep('email')}
                         className="w-full text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-primary transition-colors"
                       >
-                        Change Number or Retry
+                        Change Email or Retry
                       </button>
                     </form>
                   </motion.div>
@@ -247,10 +239,11 @@ export function LoginModal({ isOpen, onClose }: LoginModalProps) {
                       </div>
 
                       <button 
-                        className="w-full bg-slate-900 text-white py-5 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-black transition-all shadow-lg"
+                        disabled={isLoading}
+                        className="w-full bg-slate-900 text-white py-5 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-black transition-all shadow-lg disabled:opacity-50"
                       >
-                        Start Shopping
-                        <ArrowRight className="w-4 h-4" />
+                        {isLoading ? 'Saving...' : 'Start Shopping'}
+                        {!isLoading && <ArrowRight className="w-4 h-4" />}
                       </button>
                     </form>
                   </motion.div>

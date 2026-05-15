@@ -20,10 +20,12 @@ import {
   AlertCircle,
   FileText,
   CreditCard,
-  Navigation
+  Navigation,
+  Mail
 } from 'lucide-react';
 import { useState, FormEvent, useEffect } from 'react';
 import { cn } from '../lib/utils';
+import { sendEmailOtp, verifyEmailOtp } from '../lib/supabase';
 
 interface PartnerOnboardingProps {
   onComplete: (data: any) => void;
@@ -43,6 +45,7 @@ export function PartnerOnboarding({ onComplete }: PartnerOnboardingProps) {
     category: 'Grocery',
     address: '',
     phone: '',
+    email: '',
     panVatNumber: '',
     citizenshipNumber: '',
     openingTime: '08:00',
@@ -93,24 +96,14 @@ export function PartnerOnboarding({ onComplete }: PartnerOnboardingProps) {
   };
 
   const handleSendOtp = async () => {
-    if (!formData.phone || formData.phone.length < 10) return;
+    if (!formData.email) return;
     setIsVerifyingOtp(true);
     try {
-      const response = await fetch('/api/send-otp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: formData.phone })
-      });
-      const data = await response.json();
-      if (data.success) {
-        setOtpSent(true);
-      } else {
-        const fullError = data.details ? `${data.error}\n\n${data.details}` : (data.error || 'Failed to send OTP');
-        alert(fullError);
-      }
-    } catch (e) {
+      await sendEmailOtp(formData.email);
+      setOtpSent(true);
+    } catch (e: any) {
       console.error("OTP Send error:", e);
-      alert('Error connecting to authentication server.');
+      alert(e.message || 'Failed to send OTP to your email.');
     } finally {
       setIsVerifyingOtp(false);
     }
@@ -118,21 +111,14 @@ export function PartnerOnboarding({ onComplete }: PartnerOnboardingProps) {
 
   const handleVerifyOtp = async () => {
     try {
-      const response = await fetch('/api/verify-otp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: formData.phone, code: otpCode })
-      });
-      const data = await response.json();
-      if (data.success) {
+      const user = await verifyEmailOtp(formData.email, otpCode);
+      if (user) {
         setIsOtpVerified(true);
         setStep(3);
-      } else {
-        alert(data.error || 'Invalid OTP code.');
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error("OTP Verify error:", e);
-      alert('Error verifying OTP.');
+      alert(e.message || 'Verification failed. Please check the code.');
     }
   };
 
@@ -179,7 +165,7 @@ export function PartnerOnboarding({ onComplete }: PartnerOnboardingProps) {
         logo: formData.documents.storeLogo,
         verificationDetails: {
           ownerFullName: formData.ownerFullName,
-          mobileVerified: true,
+          emailVerified: true,
           citizenshipNumber: formData.citizenshipNumber,
           panVatNumber: formData.panVatNumber,
           documents: formData.documents,
@@ -287,18 +273,34 @@ export function PartnerOnboarding({ onComplete }: PartnerOnboardingProps) {
                   </div>
                 </div>
 
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest px-1">Moblie / Phone Number</label>
-                  <div className="relative">
-                    <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                    <input 
-                      required
-                      type="tel" 
-                      placeholder="+977 98XXXXXXXX"
-                      className="w-full bg-slate-50 border border-slate-100 rounded-xl py-4 pl-11 pr-4 text-sm focus:ring-2 focus:ring-primary outline-none transition-all"
-                      value={formData.phone}
-                      onChange={e => setFormData({...formData, phone: e.target.value})}
-                    />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest px-1">Moblie / Phone Number</label>
+                    <div className="relative">
+                      <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                      <input 
+                        required
+                        type="tel" 
+                        placeholder="+977 98XXXXXXXX"
+                        className="w-full bg-slate-50 border border-slate-100 rounded-xl py-4 pl-11 pr-4 text-sm focus:ring-2 focus:ring-primary outline-none transition-all"
+                        value={formData.phone}
+                        onChange={e => setFormData({...formData, phone: e.target.value})}
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest px-1">Email Address</label>
+                    <div className="relative">
+                      <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                      <input 
+                        required
+                        type="email" 
+                        placeholder="your@email.com"
+                        className="w-full bg-slate-50 border border-slate-100 rounded-xl py-4 pl-11 pr-4 text-sm focus:ring-2 focus:ring-primary outline-none transition-all"
+                        value={formData.email}
+                        onChange={e => setFormData({...formData, email: e.target.value})}
+                      />
+                    </div>
                   </div>
                 </div>
 
@@ -367,11 +369,11 @@ export function PartnerOnboarding({ onComplete }: PartnerOnboardingProps) {
             >
               <div className="text-center space-y-4 py-6">
                 <div className="w-16 h-16 bg-blue-50 text-blue-500 rounded-full flex items-center justify-center mx-auto">
-                  <ShieldCheck className="w-8 h-8" />
+                  <Mail className="w-8 h-8" />
                 </div>
                 <div className="space-y-1">
-                  <h3 className="text-xl font-black uppercase">Verify Mobile</h3>
-                  <p className="text-slate-400 text-xs font-medium">OTP has been sent to <span className="text-slate-800 font-bold">{formData.phone}</span></p>
+                  <h3 className="text-xl font-black uppercase">Verify Email</h3>
+                  <p className="text-slate-400 text-xs font-medium">OTP has been sent to <span className="text-slate-800 font-bold">{formData.email}</span></p>
                 </div>
               </div>
 
@@ -391,13 +393,14 @@ export function PartnerOnboarding({ onComplete }: PartnerOnboardingProps) {
                   <div className="grid grid-cols-1 gap-4">
                     <input 
                       type="text" 
-                      placeholder="0 0 0 0"
-                      maxLength={4}
+                      placeholder="0 0 0 0 0 0"
+                      maxLength={6}
                       className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-5 px-4 text-2xl text-center font-black tracking-[0.5em] outline-none focus:border-primary transition-all"
                       value={otpCode}
                       onChange={e => setOtpCode(e.target.value)}
                     />
                   </div>
+
                   <button 
                     type="button"
                     onClick={handleVerifyOtp}

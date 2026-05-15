@@ -44,18 +44,21 @@ export const signOut = async () => {
   if (error) throw error;
 };
 
-export const signInWithPhone = async (phone: string) => {
+export const sendEmailOtp = async (email: string) => {
   const { error } = await supabase.auth.signInWithOtp({
-    phone: phone,
+    email,
+    options: {
+      emailRedirectTo: window.location.origin,
+    },
   });
   if (error) throw error;
 };
 
-export const verifyOtp = async (phone: string, token: string) => {
+export const verifyEmailOtp = async (email: string, token: string) => {
   const { data, error } = await supabase.auth.verifyOtp({
-    phone: phone,
-    token: token,
-    type: 'sms',
+    email,
+    token,
+    type: 'email',
   });
   if (error) throw error;
   return data.user;

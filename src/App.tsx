@@ -270,74 +270,8 @@ export default function App() {
 
   const [myStore, setMyStore] = useState<StoreProfile | null>(null);
 
-  // Simulated or Authenticated User Profile
+  // Supabase Authenticated User Profile
   const [user, setUser] = useState<UserProfile | null>(null);
-
-  useEffect(() => {
-    const handleMockLogin = async (e: any) => {
-      const detail = e.detail || {};
-      
-      const userName = detail.name || (detail.phone ? `User ${detail.phone}` : 'Admin User (Demo)');
-      // Try real anonymous login to have a valid session for Supabase
-      try {
-        const { data: { user: authUser } } = await supabase.auth.signInAnonymously();
-        if (authUser) {
-          const userObj: UserProfile = {
-            id: authUser.id,
-            name: userName,
-            email: detail.phone ? `${detail.phone}@nepalmart.com` : 'admin@nepalmart.com',
-            points: 500,
-            totalSpent: 12500,
-            tier: 'gold',
-            referralCode: detail.phone ? 'MEMBER' : 'PLATFORM_ADMIN',
-            isPartner: detail.phone ? false : true, 
-            storeId: detail.phone ? null : 's1'
-          };
-
-          setUser(userObj);
-          if (!userObj.isPartner) {
-            setShowRoleSelection(true);
-          }
-
-          // Save to Supabase
-          try {
-            await supabase.from('users').upsert(userObj);
-          } catch (e) {
-            console.error("Failed to sync user to Supabase:", e);
-          }
-        }
-      } catch (err) {
-        console.log("[DEMO] Supabase anonymous login failed:", err);
-      }
-
-      if (!detail.phone) {
-        setMyStore({
-          id: 's1',
-          ownerId: 'guest-123',
-          name: 'Kathmandu Daily Mart',
-          category: 'Grocery',
-          address: 'Jawalakhel, Lalitpur',
-          contactNumber: '9841XXXXXX',
-          logo: 'https://images.unsplash.com/photo-1534723452862-4c874e70d98a?q=80&w=100&h=100&auto=format&fit=crop',
-          status: 'approved',
-          createdAt: Date.now(),
-          deliveryCharge: 40,
-          minOrderAmount: 200,
-          deliveryRadius: 5,
-          freeDeliveryThreshold: 1000
-        });
-        alert("Demo Mode Activated! I've also set you up as a Partner Store owner.");
-      } else {
-        alert(`Namaste ${userName}! Welcome to Nepal Mart.`);
-      }
-    };
-
-    window.addEventListener('mock-login', handleMockLogin);
-    
-    return () => {
-      window.removeEventListener('mock-login', handleMockLogin);
-    };
-  }, []);
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
@@ -351,22 +285,28 @@ export default function App() {
         
         if (userData) {
           setUser(userData as UserProfile);
+          // If they just logged in and aren't a partner, maybe show role selection
+          // But only if they haven't made a choice yet.
+          // For now, let's keep it simple.
+          if (!userData.isPartner && !showRoleSelection && event === 'SIGNED_IN') {
+             // setShowRoleSelection(true);
+          }
         } else {
-          // Create basic profile
+          // Create basic profile for NEW user
           const userObj: UserProfile = {
             id: supabaseUser.id,
-            name: supabaseUser.user_metadata?.full_name || 'Nepal Mart User',
+            name: supabaseUser.user_metadata?.full_name || supabaseUser.email?.split('@')[0] || 'User',
             email: supabaseUser.email || '',
             points: 0, 
             totalSpent: 0, 
             tier: 'bronze',
             referralCode: `MART${supabaseUser.id.slice(0, 5).toUpperCase()}`,
+            isPartner: false,
+            storeId: null
           };
           setUser(userObj);
           await supabase.from('users').insert(userObj);
-          if (!userObj.isPartner) {
-            setShowRoleSelection(true);
-          }
+          setShowRoleSelection(true);
         }
       } else {
         setUser(null);
@@ -375,7 +315,7 @@ export default function App() {
     });
 
     return () => subscription.unsubscribe();
-  }, []);
+  }, [showRoleSelection]);
 
   useEffect(() => {
     const fetchBaseData = async () => {
@@ -612,7 +552,7 @@ export default function App() {
       location: data.location,
       verificationDetails: {
         ownerFullName: data.ownerFullName,
-        mobileVerified: true,
+        emailVerified: true,
         citizenshipNumber: data.citizenshipNumber,
         panVatNumber: data.panVatNumber,
         documents: data.documents,
@@ -803,7 +743,7 @@ export default function App() {
                 {t('orders')}
               </button>
 
-              {user.email === 'admin@nepalmart.com' && (
+              {isAdmin && (
                 <button 
                   onClick={() => setActiveTab('admin')}
                   className={cn(
